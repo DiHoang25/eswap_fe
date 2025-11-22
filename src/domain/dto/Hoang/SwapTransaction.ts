@@ -5,21 +5,24 @@
 
 export interface SwapTransaction {
   swapTransactionID: string;
-  userID: string;
+  userID?: string;
   userName?: string;
-  vehicleID: string;
+  driverName?: string; // Backend: driver name from booking
+  phoneNumber?: string; // Backend: phone number from booking
+  vehicleID?: string;
   vehiclePlate?: string;
-  stationID: string;
+  stationID?: string;
   stationName?: string;
   bookingID?: string;
-  oldBatteryID: string;
+  bookingTime?: string; // Backend: booking time from API
+  oldBatteryID?: string;
   oldBatteryCode?: string;
-  newBatteryID: string;
+  newBatteryID?: string;
   newBatteryCode?: string;
-  swapDate: string;
-  amount: number;
+  swapDate?: string;
+  amount?: number;
   // Backend enum: initiated, in_progress, completed, cancelled, paid, failed
-  status: 'initiated' | 'in_progress' | 'completed' | 'cancelled' | 'paid' | 'failed';
+  status?: 'initiated' | 'in_progress' | 'completed' | 'cancelled' | 'paid' | 'failed';
   paymentStatus?: 'Pending' | 'Paid' | 'Failed';
   // Backend fields
   swapStatus?: string; // Backend: SwapStatus (lowercase)
