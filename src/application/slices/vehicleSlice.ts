@@ -1,6 +1,12 @@
 import { Vehicle } from "@/domain/entities/Vehicle";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { fetchAllVehicles, fetchVehicleById } from "../services/vehicleService";
+import {
+  fetchAllVehicles,
+  fetchVehicleById,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+} from "../services/vehicleService";
 import {
   selectVehicleUseCase,
   getLastSelectedVehicleIdUseCase,
@@ -86,6 +92,81 @@ const vehicleSlice = createSlice({
       .addCase(fetchVehicleById.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || "Failed to fetch vehicle";
+      })
+      // createVehicle
+      .addCase(createVehicle.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createVehicle.fulfilled, (state, action) => {
+        state.loading = false;
+        state.vehicles.push(action.payload);
+        state.lastFetched = Date.now();
+        // Tự động chọn xe vừa tạo nếu chưa có xe nào được chọn
+        if (!state.selectedVehicle) {
+          selectVehicleUseCase(action.payload);
+          state.selectedVehicle = action.payload;
+        }
+      })
+      .addCase(createVehicle.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || "Failed to create vehicle";
+      })
+      // updateVehicle
+      .addCase(updateVehicle.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateVehicle.fulfilled, (state, action) => {
+        state.loading = false;
+        const index = state.vehicles.findIndex(
+          (v) => v.vehicleID === action.payload.vehicleID
+        );
+        if (index !== -1) {
+          state.vehicles[index] = action.payload;
+        }
+        // Cập nhật selected vehicle nếu đang được chọn
+        if (
+          state.selectedVehicle &&
+          state.selectedVehicle.vehicleID === action.payload.vehicleID
+        ) {
+          selectVehicleUseCase(action.payload);
+          state.selectedVehicle = action.payload;
+        }
+        state.lastFetched = Date.now();
+      })
+      .addCase(updateVehicle.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || "Failed to update vehicle";
+      })
+      // deleteVehicle
+      .addCase(deleteVehicle.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteVehicle.fulfilled, (state, action) => {
+        state.loading = false;
+        state.vehicles = state.vehicles.filter(
+          (v) => v.vehicleID !== action.payload
+        );
+        // Clear selected vehicle nếu đang chọn xe bị xóa
+        if (
+          state.selectedVehicle &&
+          state.selectedVehicle.vehicleID === action.payload
+        ) {
+          selectVehicleUseCase(null);
+          state.selectedVehicle = null;
+          // Chọn xe đầu tiên nếu còn xe
+          if (state.vehicles.length > 0) {
+            selectVehicleUseCase(state.vehicles[0]);
+            state.selectedVehicle = state.vehicles[0];
+          }
+        }
+        state.lastFetched = Date.now();
+      })
+      .addCase(deleteVehicle.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || "Failed to delete vehicle";
       });
   },
 });

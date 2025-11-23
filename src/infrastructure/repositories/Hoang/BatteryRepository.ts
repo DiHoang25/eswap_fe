@@ -244,20 +244,72 @@ export class BatteryRepository implements IBatteryRepository {
 
   async getByVehicle(vehicleId: string): Promise<Battery | null> {
     // Backend endpoint: GET /api/batteries?vehicleId={vehicleId}
+    // Returns null if vehicle has no battery (404), throws error for other cases
     try {
       const response = await api.get('/batteries', {
         params: { vehicleId }
       });
-      const data = response.data.data || response.data;
+      let data = response.data.data || response.data;
+      
       // Backend may return single battery or array
       if (Array.isArray(data)) {
-        return data.length > 0 ? data[0] : null;
+        data = data.length > 0 ? data[0] : null;
       }
-      return data || null;
+      
+      if (!data) {
+        return null;
+      }
+      
+      // Map backend fields (PascalCase) to frontend Battery interface (camelCase)
+      // Backend trả về: BatteryID, CurrentPercentage, BatteryTypeName, etc.
+      const batteryID = data?.BatteryID || data?.batteryID || data?.batteryId;
+      const batteryTypeName = data?.BatteryTypeName || data?.batteryTypeName;
+      const batteryStatus = data?.BatteryStatus || data?.batteryStatus;
+      const lastStationID = data?.LastStationID || data?.lastStationID;
+      const batteryTypeID = data?.BatteryTypeID || data?.batteryTypeID;
+      const currentLocation = data?.CurrentLocation || data?.currentLocation;
+      const soH = data?.SoH ?? data?.soH ?? null;
+      const currentPercentage = data?.CurrentPercentage ?? data?.currentPercentage ?? null;
+      const vehicleID = data?.VehicleID || data?.vehicleID;
+      const batterySlotID = data?.BatterySlotID || data?.batterySlotID;
+      
+      // Map status: "available" -> "Available", "in-use" -> "In-Use", etc.
+      let mappedStatus: Battery['status'] = 'Available';
+      if (batteryStatus) {
+        const statusLower = batteryStatus.toLowerCase();
+        if (statusLower === 'available') mappedStatus = 'Available';
+        else if (statusLower === 'in-use' || statusLower === 'inuse') mappedStatus = 'In-Use';
+        else if (statusLower === 'charging') mappedStatus = 'Charging';
+        else if (statusLower === 'maintenance') mappedStatus = 'Maintenance';
+        else if (statusLower === 'damaged' || statusLower === 'faulty') mappedStatus = 'Damaged';
+      }
+      
+      return {
+        batteryId: batteryID || '',
+        batteryCode: batteryID || '',
+        batteryType: batteryTypeName || 'Unknown',
+        status: mappedStatus,
+        stationId: lastStationID || '',
+        // Keep original backend fields
+        batteryID: batteryID,
+        batteryTypeID: batteryTypeID,
+        batteryTypeName: batteryTypeName,
+        currentLocation: currentLocation,
+        batteryStatus: batteryStatus,
+        soH: soH,
+        currentPercentage: currentPercentage, // ← Quan trọng: map từ CurrentPercentage
+        vehicleID: vehicleID,
+        batterySlotID: batterySlotID,
+        lastStationID: lastStationID,
+      };
     } catch (error: any) {
+      // 404 = Vehicle has no battery (normal case for new vehicles)
+      if (error?.response?.status === 404) {
+        return null;
+      }
+      // Other errors (500, network, etc.) should be thrown
       console.error('[BatteryRepository] Failed to get battery by vehicle:', error);
-      // Return null if not found (customer may not have old battery)
-      return null;
+      throw error;
     }
   }
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSelector } from "@/application/hooks/useRedux";
 import CarInfoCard from "./components/CarInfoCard";
 import BatteryStatusCard from "./components/BatteryStatusCard";
 import BookingInfoCard from "./components/BookingInfoCard";
@@ -15,6 +16,7 @@ function CustomerHomePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { selectedVehicle } = useAppSelector((state) => state.vehicle);
   const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
 
   // Handle Google OAuth callback redirect - MUST run before auth check
@@ -101,7 +103,10 @@ function CustomerHomePage() {
 
             {/* Battery Status Card */}
             <div className="min-h-[200px]">
-              <BatteryStatusCard onFindStation={handleFindStation} />
+              <BatteryStatusCard 
+                selectedVehicle={selectedVehicle}
+                onFindStation={handleFindStation} 
+              />
             </div>
           </div>
 

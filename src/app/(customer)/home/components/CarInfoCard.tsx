@@ -82,7 +82,10 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
     : "Loading...";
 
   return (
-    <div className="relative flex items-center gap-4 rounded-2xl bg-linear-to-br from-gray-200 to-gray-300 px-2 my-10 ml-20 shadow-lg overflow-visible">
+    <div 
+      className="relative flex items-center gap-4 rounded-2xl bg-linear-to-br from-gray-200 to-gray-300 px-2 my-10 ml-20 shadow-lg overflow-visible select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+    >
       {/* Hình xe - tràn ra ngoài một chút */}
       <div className="relative shrink-0 w-1/2 -ml-14 flex items-center justify-center">
         <Image
@@ -96,9 +99,9 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
       </div>
 
       {/* Thông tin xe */}
-      <div className="flex flex-col justify-center text-left flex-1/2 p-2 pl-12">
+      <div className="flex flex-col justify-center text-left flex-1/2 p-2 pl-12" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-indigo-800">{carModel}</h2>
+          <h2 className="text-xl font-bold text-indigo-800 select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>{carModel}</h2>
           <button
             onClick={handleOpenModal}
             className="flex items-center justify-center w-10 h-10 rounded-full border-2 border-gray-300 bg-white text-gray-600 hover:bg-gray-600 hover:text-white transition-all duration-200 shrink-0"
@@ -108,8 +111,8 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
             <TbRefresh size={18} />
           </button>
         </div>
-        <p className="text-lg font-medium text-gray-800">{licensePlate}</p>
-        <p className="text-base text-gray-600">{batteryType}</p>
+        <p className="text-lg font-medium text-gray-800 select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>{licensePlate}</p>
+        <p className="text-base text-gray-600 select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>{batteryType}</p>
       </div>
 
       {/* Vehicle Selection Modal */}

@@ -63,6 +63,7 @@ api.interceptors.response.use(
       // 4. GET /api/bookings/search 405 (endpoint not supported)
       // 5. PATCH /api/bookings/{id} 404 (endpoint broken - returns "Swap transaction not found")
       // 6. PATCH /api/bookings/{id} 400 with "No available batteries" (handled in component)
+      // 7. GET /api/batteries?vehicleId=... 404 (expected when vehicle has no battery - normal state)
       const isLogoutError = errorDetails.url?.includes('/logout') || errorDetails.url?.includes('/auth/logout');
       const isGetBookingById405 = error.response.status === 405 && errorDetails.url?.match(/\/bookings\/[^\/]+$/) && originalRequest?.method === 'get';
       const isSearchBooking405 = error.response.status === 405 && errorDetails.url?.includes('/bookings/search') && originalRequest?.method === 'get';
@@ -70,12 +71,19 @@ api.interceptors.response.use(
       const isNoAvailableBatteries = error.response.status === 400 && 
                                      (errorDetails.message?.toLowerCase().includes('no available batteries') ||
                                       errorDetails.message?.toLowerCase().includes('no available battery'));
+      // Check if this is a GET /batteries?vehicleId=... request (404 is expected when vehicle has no battery)
+      const isBatteryByVehicle404 = error.response.status === 404 && 
+                                    (errorDetails.url?.includes('/batteries') || originalRequest?.url?.includes('/batteries')) &&
+                                    (originalRequest?.params?.vehicleId || 
+                                     originalRequest?.url?.includes('vehicleId') ||
+                                     errorDetails.message?.toLowerCase().includes('battery not found for the specified vehicle'));
       const shouldSuppressLog = error.response.status === 401 || 
                                  (error.response.status === 404 && isLogoutError) ||
                                  isGetBookingById405 ||
                                  isSearchBooking405 ||
                                  isPatchBookingById404 ||
-                                 isNoAvailableBatteries;
+                                 isNoAvailableBatteries ||
+                                 isBatteryByVehicle404;
       
       if (!shouldSuppressLog) {
         console.error('[API Error]', errorDetails);
