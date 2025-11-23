@@ -8,6 +8,8 @@ import {
   FaMapMarkerAlt,
   FaClock,
   FaCar,
+  FaSpinner,
+  FaCheckCircle,
 } from "react-icons/fa";
 import { getAllStationsUseCase } from "@/application/usecases/station/GetAllStations.usecase";
 import { stationRepositoryAPI } from "@/infrastructure/repositories/StationRepositoryAPI.impl";
@@ -15,6 +17,9 @@ import { Station } from "@/domain/entities/Station";
 import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
 import { fetchAllVehicles } from "@/application/services/vehicleService";
 import { fetchAllBatteryTypes } from "@/application/services/batteryTypeService";
+import { bookingRepositoryAPI } from "@/infrastructure/repositories/BookingRepositoryAPI.impl";
+import { createBookingUseCase } from "@/application/usecases/booking";
+import { useAuth } from "@/presentation/hooks/useAuth";
 
 export default function StationBookingPage() {
   const params = useParams();
@@ -24,10 +29,25 @@ export default function StationBookingPage() {
 
   const [station, setStation] = useState<Station | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [bookingTime, setBookingTime] = useState<Date>(new Date());
+  const [activeSubscriptions, setActiveSubscriptions] = useState<any[]>([]);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
 
   // Get vehicle info and battery types from Redux
   const { selectedVehicle } = useAppSelector((state) => state.vehicle);
   const { batteryTypes } = useAppSelector((state) => state.batteryType);
+  const { user } = useAuth();
+
+  // Initialize booking time to current time
+  useEffect(() => {
+    const now = new Date();
+    now.setMinutes(0);
+    now.setSeconds(0);
+    setBookingTime(now);
+  }, []);
 
   // Fetch vehicles and battery types when component mounts if not already loaded
   useEffect(() => {
@@ -45,13 +65,47 @@ export default function StationBookingPage() {
         setLoading(true);
         const stations = await getAllStationsUseCase(stationRepositoryAPI);
         const foundStation = stations.find((s) => s.stationID === stationId);
-        setStation(foundStation || null);
-
-        // Update URL with station name for breadcrumb
+        
         if (foundStation) {
+          // Fetch availableSlots from search API using station's own location
+          if (selectedVehicle && batteryTypes.length > 0) {
+            try {
+              const batteryType = batteryTypes.find(
+                (bt) => bt.batteryTypeID === selectedVehicle.batteryTypeID
+              );
+              
+              if (batteryType) {
+                // Use station's coordinates to search
+                const searchResults = await stationRepositoryAPI.search({
+                  latitude: foundStation.latitude,
+                  longitude: foundStation.longitude,
+                  batteryType: batteryType.batteryTypeModel as "Small" | "Medium" | "Large",
+                });
+                
+                // Find matching station in search results
+                const searchStation = searchResults.find(
+                  (s) => s.stationName === foundStation.stationName
+                );
+                
+                if (searchStation) {
+                  // Merge availableSlots from search API into station data
+                  (foundStation as any).availableSlots = searchStation.availableSlots;
+                  console.log("✅ Updated station with availableSlots:", searchStation.availableSlots);
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching availableSlots from search API:", error);
+            }
+          }
+          
+          setStation(foundStation || null);
+
+          // Update URL with station name for breadcrumb
           const url = new URL(window.location.href);
           url.searchParams.set("name", foundStation.stationName);
           window.history.replaceState({}, "", url);
+        } else {
+          setStation(null);
         }
       } catch (error) {
         console.error("Error fetching station:", error);
@@ -63,37 +117,163 @@ export default function StationBookingPage() {
     if (stationId) {
       fetchStationDetails();
     }
-  }, [stationId]);
+  }, [stationId, selectedVehicle, batteryTypes]);
 
-  const handleBooking = () => {
+  // Fetch user subscriptions
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      try {
+        setLoadingSubscription(true);
+        let token = localStorage.getItem("accessToken");
+        
+        if (!token) {
+          const cookies = document.cookie.split(';');
+          const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
+          if (tokenCookie) {
+            token = tokenCookie.split('=')[1];
+          }
+        }
+
+        if (!token) {
+          setLoadingSubscription(false);
+          return;
+        }
+
+        const response = await fetch('/api/me/user-subscriptions', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          const active = result.data.filter((sub: any) => sub.status === 'Active');
+          setActiveSubscriptions(active);
+        }
+      } catch (error) {
+        console.error('Error fetching subscriptions:', error);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+
+    fetchSubscriptions();
+  }, []);
+
+  const handleBooking = async () => {
     if (!station || !selectedVehicle) {
-      alert("Vui lòng đảm bảo đã chọn xe");
+      setError("Please ensure you have selected a vehicle");
       return;
     }
 
-    // Calculate booking time: current time + 2 hours
-    const bookingTime = new Date();
-    bookingTime.setHours(bookingTime.getHours() + 2);
+    // Check if dev mode or has API token
+    const devToken = process.env.NEXT_PUBLIC_API_TOKEN;
+    const isDevMode = Boolean(devToken);
 
-    const bookingDate = bookingTime.toISOString().split("T")[0];
-    const bookingTimeString = bookingTime.toTimeString().slice(0, 5);
+    // In dev mode or if not authenticated, use dummy user
+    const userId = user?.userId || (isDevMode ? "12345" : null);
 
-    // Navigate to booking page with station info and battery type from vehicle
-    router.push(
-      `/booking?stationId=${
-        station.stationID
-      }&date=${bookingDate}&time=${bookingTimeString}&batteryType=${
-        selectedVehicle.batteryTypeModel || "Medium"
-      }`
-    );
+    if (!userId) {
+      setError("Please login to book");
+      router.push("/login?redirect=/findstation/" + stationId);
+      return;
+    }
+
+    // Validate booking time is not in the past
+    const now = new Date();
+    if (bookingTime < now) {
+      setError("Booking time cannot be in the past");
+      return;
+    }
+
+    setBookingLoading(true);
+    setError("");
+
+    try {
+      const bookingRequest = {
+        userID: userId,
+        vehicleID: selectedVehicle.vehicleID,
+        stationID: station.stationID,
+        batteryTypeID: selectedVehicle.batteryTypeID,
+        bookingDays: bookingTime.getDate(),
+        bookingMonth: bookingTime.getMonth() + 1,
+        bookingYear: bookingTime.getFullYear(),
+        bookingHour: bookingTime.getHours(),
+        bookingMinute: bookingTime.getMinutes(),
+      };
+
+      await createBookingUseCase(bookingRepositoryAPI, bookingRequest);
+
+      setBookingSuccess(true);
+      
+      // Redirect to bookings list page after 2 seconds
+      setTimeout(() => {
+        router.push("/booking");
+      }, 2000);
+    } catch (err) {
+      console.error("Error creating booking:", err);
+      
+      // Extract error message from various error formats
+      let errorMessage = "Failed to create booking";
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        const errorObj = err as any;
+        // Check for axios error response
+        if (errorObj.response?.data?.message) {
+          errorMessage = errorObj.response.data.message;
+        } else if (errorObj.response?.data) {
+          errorMessage = typeof errorObj.response.data === 'string' 
+            ? errorObj.response.data 
+            : JSON.stringify(errorObj.response.data);
+        } else if (errorObj.message) {
+          errorMessage = errorObj.message;
+        }
+      }
+      
+      // Improve error messages for better UX
+      if (errorMessage.includes("ongoing swap transaction")) {
+        errorMessage = "⚠️ You have an ongoing swap transaction. Please complete it before creating a new booking.";
+      } else if (errorMessage.includes("existing pending booking") || errorMessage.includes("pending booking")) {
+        errorMessage = "⚠️ You already have a pending booking. Please complete or cancel it before creating a new one.";
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setBookingLoading(false);
+    }
   };
+
+  // Success modal
+  if (bookingSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
+            <FaCheckCircle className="text-5xl text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Booking Successful!
+          </h2>
+          <p className="text-gray-600 mb-4">
+            Redirecting to My Bookings...
+          </p>
+          <div className="flex items-center justify-center">
+            <FaSpinner className="text-2xl text-indigo-600 animate-spin" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screenflex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải thông tin trạm...</p>
+          <p className="text-gray-600">Loading station information...</p>
         </div>
       </div>
     );
@@ -104,35 +284,43 @@ export default function StationBookingPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Không tìm thấy trạm
+            Station Not Found
           </h2>
           <p className="text-gray-600 mb-6">
-            Trạm bạn đang tìm không tồn tại hoặc đã bị xóa
+            The station you are looking for does not exist or has been removed
           </p>
           <button
             onClick={() => router.push("/findstation")}
             className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Quay lại tìm trạm
+            Back to Find Station
           </button>
         </div>
       </div>
     );
   }
 
+  // Priority: availableSlots from search API > batteryInSlots
+  const availableBatteries = (station as any).availableSlots ?? station.batteryInSlots;
   const availabilityPercentage = Math.round(
-    (station.batteryInSlots / station.slotNumber) * 100
+    (availableBatteries / station.stationCapacity) * 100
   );
 
+  // Check if booking time is in the past
+  const isBookingTimeValid = () => {
+    const now = new Date();
+    return bookingTime >= now;
+  };
+
   return (
-    <div className="h-full">
+    <div className="h-full relative">
       {/* Header */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-gray-600 hover:text-indigo-600 mb-4 transition-colors"
       >
         <FaArrowLeft />
-        <span>Quay lại</span>
+        <span>Back</span>
       </button>
 
       {/* Two Column Layout */}
@@ -160,26 +348,26 @@ export default function StationBookingPage() {
                     <FaBolt className="text-white text-lg" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Pin có sẵn</p>
+                    <p className="text-xs text-gray-600">Available</p>
                     <p className="text-xl font-bold text-green-700">
-                      {station.batteryInSlots}
+                      {availableBatteries}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Total Slots */}
+              {/* Total Batteries */}
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
                 <div className="flex items-center gap-2">
                   <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                     <span className="text-white text-lg font-bold">
-                      {station.slotNumber}
+                      {station.stationCapacity}
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Tổng số slot</p>
+                    <p className="text-xs text-gray-600">Total Batteries</p>
                     <p className="text-xl font-bold text-blue-700">
-                      {station.slotNumber}
+                      {station.stationCapacity}
                     </p>
                   </div>
                 </div>
@@ -194,7 +382,7 @@ export default function StationBookingPage() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Khả dụng</p>
+                    <p className="text-xs text-gray-600">Availability</p>
                     <p className="text-xl font-bold text-indigo-700">
                       {availabilityPercentage}%
                     </p>
@@ -207,10 +395,10 @@ export default function StationBookingPage() {
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-gray-700">
-                  Tình trạng pin
+                  Battery Status
                 </span>
                 <span className="text-xs text-gray-600">
-                  {station.batteryInSlots}/{station.slotNumber} pin
+                  {availableBatteries}/{station.stationCapacity} available
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -224,19 +412,84 @@ export default function StationBookingPage() {
             </div>
 
             {/* Status Message */}
-            {station.batteryInSlots > 0 ? (
+            {availableBatteries > 0 ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-green-800 font-medium text-sm">
-                  ✓ Trạm này đang có pin sẵn để đổi
+                   This station has batteries available for swap
                 </p>
               </div>
             ) : (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-red-800 font-medium text-sm">
-                  ✗ Trạm này hiện không có pin sẵn
+                   This station currently has no batteries available
                 </p>
               </div>
             )}
+
+            {/* Subscription Status */}
+            <div className="mt-4">
+              {loadingSubscription ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <FaSpinner className="text-indigo-600 animate-spin text-sm" />
+                    <span className="text-sm text-gray-600">Checking subscription...</span>
+                  </div>
+                </div>
+              ) : activeSubscriptions.length > 0 ? (
+                <div className="bg-white border-2 border-green-500 rounded-lg p-3">
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="flex-shrink-0">
+                      <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <h4 className="text-sm font-bold text-green-800">
+                      Active Subscription
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    {activeSubscriptions.map((sub, index) => (
+                      <div key={sub.subscriptionID} className={index > 0 ? 'pt-2 border-t border-green-200' : ''}>
+                        <p className="text-xs text-gray-700 mb-0.5">
+                          <strong>Plan:</strong> {sub.planName}
+                        </p>
+                        <p className="text-xs text-gray-700 mb-0.5">
+                          <strong>Battery:</strong> {sub.batteryType}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          Valid until: {new Date(sub.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          Remaining swaps: {sub.remainingSwaps !== null ? sub.remainingSwaps : 'Unlimited'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border-2 border-amber-500 rounded-lg p-3">
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="flex-shrink-0">
+                      <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <h4 className="text-sm font-bold text-amber-800">
+                      No Active Subscription
+                    </h4>
+                  </div>
+                  <p className="text-xs text-amber-700 mb-2">
+                    You need a subscription plan to swap batteries
+                  </p>
+                  <button
+                    onClick={() => router.push('/billing-plan')}
+                    className="w-full px-3 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700 transition-colors"
+                  >
+                    View Subscription Plans
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -244,7 +497,7 @@ export default function StationBookingPage() {
         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <FaClock className="text-indigo-600" />
-            Đặt lịch đổi pin
+            Book Battery Swap
           </h2>
 
           <div className="space-y-4 flex-1">
@@ -255,23 +508,23 @@ export default function StationBookingPage() {
                   <FaCar className="text-indigo-600 mt-1 shrink-0 text-xl" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-gray-800 mb-2">
-                      Thông tin xe
+                      Vehicle Information
                     </p>
                     <div className="space-y-1">
                       <div className="flex justify-between">
-                        <span className="text-xs text-gray-600">Mẫu xe:</span>
+                        <span className="text-xs text-gray-600">Model:</span>
                         <span className="text-xs font-medium text-gray-800">
                           {selectedVehicle.vehicleName}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-xs text-gray-600">Biển số:</span>
+                        <span className="text-xs text-gray-600">License:</span>
                         <span className="text-xs font-medium text-gray-800">
                           {selectedVehicle.licensePlate}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-xs text-gray-600">Loại pin:</span>
+                        <span className="text-xs text-gray-600">Battery:</span>
                         <span className="text-xs font-medium text-indigo-700">
                           {(() => {
                             const batteryType = batteryTypes.find(
@@ -292,27 +545,190 @@ export default function StationBookingPage() {
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <p className="text-sm text-yellow-800">
-                  ⚠️ Chưa có thông tin xe. Vui lòng thêm xe trong phần quản lý
-                  xe.
+                   No vehicle information available. Please add a vehicle in the vehicle management section.
                 </p>
               </div>
             )}
 
-            {/* Booking Time Info */}
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <FaClock className="text-indigo-600 mt-1 shrink-0" />
+            {/* Error Display */}
+            {error && (
+              <div className={`border-l-4 p-4 rounded-lg ${
+                error.includes("ongoing swap transaction") || error.includes("pending booking")
+                  ? "bg-amber-50 border-amber-500"
+                  : "bg-red-50 border-red-500"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {error.includes("ongoing swap transaction") || error.includes("pending booking") ? (
+                      <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${
+                      error.includes("ongoing swap transaction") || error.includes("pending booking")
+                        ? "text-amber-800"
+                        : "text-red-700"
+                    }`}>
+                      {error}
+                    </p>
+                    {(error.includes("ongoing swap transaction") || error.includes("pending booking")) && (
+                      <button
+                        onClick={() => router.push("/history")}
+                        className="mt-2 text-sm font-semibold text-amber-700 hover:text-amber-900 underline"
+                      >
+                        View My Bookings →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Booking Time Picker */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <FaClock className="text-indigo-600" />
+                <p className="text-sm font-semibold text-gray-800">
+                  Select Booking Time
+                </p>
+              </div>
+              
+              {/* Date Input */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Date:
+                </label>
+                <input
+                  type="date"
+                  value={bookingTime.toISOString().split('T')[0]}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => {
+                    const newDate = new Date(e.target.value);
+                    newDate.setHours(bookingTime.getHours());
+                    newDate.setMinutes(bookingTime.getMinutes());
+                    const now = new Date();
+                    if (newDate >= now) {
+                      setBookingTime(newDate);
+                      setError("");
+                    } else {
+                      setError("Cannot select date in the past");
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Time Input */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-1">
-                    Thời gian đổi pin
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Hour:
+                  </label>
+                  <select
+                    value={bookingTime.getHours()}
+                    onChange={(e) => {
+                      const newDate = new Date(bookingTime);
+                      newDate.setHours(parseInt(e.target.value));
+                      const now = new Date();
+                      if (newDate >= now) {
+                        setBookingTime(newDate);
+                        setError("");
+                      } else {
+                        setError("Cannot select time in the past");
+                      }
+                    }}
+                    className="w-full px-2 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
+                      const now = new Date();
+                      const selectedDate = new Date(bookingTime);
+                      selectedDate.setHours(0, 0, 0, 0);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      
+                      // Disable if selected date is today and hour is in the past
+                      const isDisabled = selectedDate.getTime() === today.getTime() && hour < now.getHours();
+                      
+                      return (
+                        <option key={hour} value={hour} disabled={isDisabled} style={isDisabled ? { color: '#ccc' } : {}}>
+                          {String(hour).padStart(2, '0')}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Minute:
+                  </label>
+                  <select
+                    value={bookingTime.getMinutes()}
+                    onChange={(e) => {
+                      const newDate = new Date(bookingTime);
+                      newDate.setMinutes(parseInt(e.target.value));
+                      const now = new Date();
+                      if (newDate >= now) {
+                        setBookingTime(newDate);
+                        setError("");
+                      } else {
+                        setError("Cannot select time in the past");
+                      }
+                    }}
+                    className="w-full px-2 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {Array.from({ length: 60 }, (_, i) => i).map((minute) => {
+                      const now = new Date();
+                      const selectedDate = new Date(bookingTime);
+                      selectedDate.setHours(0, 0, 0, 0);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      
+                      // Disable if selected date is today, same hour, and minute is in the past
+                      const isDisabled = 
+                        selectedDate.getTime() === today.getTime() && 
+                        bookingTime.getHours() === now.getHours() && 
+                        minute <= now.getMinutes();
+                      
+                      return (
+                        <option key={minute} value={minute} disabled={isDisabled} style={isDisabled ? { color: '#ccc' } : {}}>
+                          {String(minute).padStart(2, '0')}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Selected Time Display */}
+              <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
+                <p className="text-xs text-blue-900">
+                  <strong>Selected:</strong> {bookingTime.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </p>
+              </div>
+            </div>
+
+            {/* Booking Time Info */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <FaClock className="text-indigo-600 mt-0.5 shrink-0 text-sm" />
+                <div>
+                  <p className="text-xs font-semibold text-gray-800 mb-1">
+                    Swap Time Window
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Bạn có tối đa{" "}
-                    <strong className="text-indigo-700">2 giờ</strong> kể từ lúc
-                    đặt lịch để đến trạm đổi pin.
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Thời gian bắt đầu: Sau khi xác nhận đặt lịch
+                  <p className="text-xs text-gray-600">
+                    You have up to <strong className="text-indigo-700">1 hour</strong> from booking time to arrive at the station.
                   </p>
                 </div>
               </div>
@@ -321,21 +737,27 @@ export default function StationBookingPage() {
             {/* Booking Button */}
             <button
               onClick={handleBooking}
-              disabled={!selectedVehicle || station.batteryInSlots === 0}
-              className="w-full bg-linear-to-r from-indigo-600 to-indigo-800 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-indigo-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+              disabled={!selectedVehicle || availableBatteries === 0 || bookingLoading || !isBookingTimeValid()}
+              className="w-full bg-gradient-to-r from-indigo-600 to-indigo-800 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-indigo-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2"
             >
-              {!selectedVehicle
-                ? "Chưa có thông tin xe"
-                : station.batteryInSlots === 0
-                ? "Trạm hết pin"
-                : "Đặt lịch ngay"}
+              {bookingLoading ? (
+                <>
+                  <FaSpinner className="animate-spin" />
+                  Processing...
+                </>
+              ) : !selectedVehicle ? (
+                "No Vehicle Selected"
+              ) : availableBatteries === 0 ? (
+                "No Batteries Available"
+              ) : (
+                "Book Now"
+              )}
             </button>
 
             {/* Info Note */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-800">
-                <strong>Lưu ý:</strong> Vui lòng đến trong vòng 2 giờ sau khi
-                đặt lịch. Nếu muốn hủy lịch, vui lòng thực hiện trước 30 phút.
+                <strong>Note:</strong> Please arrive within 1 hour after booking. To cancel, please do so at least 30 minutes in advance.
               </p>
             </div>
           </div>

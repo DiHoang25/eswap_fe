@@ -1,99 +1,59 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { withCustomerAuth } from '@/hoc/withAuth';
-import { useAuth } from "@/presentation/hooks/useAuth";
-import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
-import { fetchAllVehicles } from "@/application/services/vehicleService";
-import { fetchAllBatteryTypes } from "@/application/services/batteryTypeService";
-import { fetchAllStations } from "@/application/services/stationService";
-import { bookingRepositoryAPI } from "@/infrastructure/repositories/BookingRepositoryAPI.impl";
-import { createBookingUseCase } from "@/application/usecases/booking";
-import { BookingDTO } from "@/dto";
-import {
-  FaCalendarAlt,
-  FaClock,
-  FaMapMarkerAlt,
-  FaCar,
-  FaBatteryFull,
-  FaCheckCircle,
-  FaSpinner,
-  FaHistory,
-} from "react-icons/fa";
+import { FaSpinner } from "react-icons/fa";
 
 const BookingPage = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user } = useAuth();
-  const dispatch = useAppDispatch();
-
-  // Get vehicle, battery types and stations from Redux
-  const { selectedVehicle, vehicles } = useAppSelector(
-    (state) => state.vehicle
-  );
-  const { batteryTypes } = useAppSelector((state) => state.batteryType);
-  const { stations } = useAppSelector((state) => state.station);
 
   // State management
-  const [loading, setLoading] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [bookingData, setBookingData] = useState<BookingDTO | null>(null);
-  const [error, setError] = useState<string>("");
-  const [showAllBookings, setShowAllBookings] = useState(false);
   const [allBookings, setAllBookings] = useState<any[]>([]);
-  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [filteredBookings, setFilteredBookings] = useState<any[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [error, setError] = useState<string>("");
+  const [timeFilter, setTimeFilter] = useState<string>("all"); // all, today, week, month
 
-  // Booking form data
-  const [stationId, setStationId] = useState("");
-  const [stationName, setStationName] = useState("");
-  const [bookingTime, setBookingTime] = useState<Date>(new Date());
-
-  // Initialize booking time to current time
+  // Fetch all bookings on mount
   useEffect(() => {
-    const now = new Date();
-    now.setMinutes(0);
-    now.setSeconds(0);
-    setBookingTime(now);
+    fetchAllBookings();
   }, []);
 
-  // Get station info from URL params and find station name from Redux
+  // Filter bookings when data or filter changes
   useEffect(() => {
-    const stationIdParam = searchParams.get("stationId");
-    const stationNameParam = searchParams.get("stationName");
+    filterBookingsByTime();
+  }, [allBookings, timeFilter]);
 
-    if (stationIdParam) {
-      setStationId(stationIdParam);
-      if (stationNameParam) {
-        setStationName(stationNameParam);
-      } else {
-        // Find station name from Redux stations
-        const station = stations.find((s) => s.stationID === stationIdParam);
-        if (station) {
-          setStationName(station.stationName);
-        }
+  // Filter bookings by time
+  const filterBookingsByTime = () => {
+    if (timeFilter === "all") {
+      setFilteredBookings(allBookings);
+      return;
+    }
+
+    const now = new Date();
+    const filtered = allBookings.filter((booking) => {
+      const bookingDate = new Date(booking.bookingTime);
+      
+      switch (timeFilter) {
+        case "today":
+          return bookingDate.toDateString() === now.toDateString();
+        case "week":
+          const weekAgo = new Date(now);
+          weekAgo.setDate(now.getDate() - 7);
+          return bookingDate >= weekAgo;
+        case "month":
+          const monthAgo = new Date(now);
+          monthAgo.setMonth(now.getMonth() - 1);
+          return bookingDate >= monthAgo;
+        default:
+          return true;
       }
-    }
-  }, [searchParams, stations]);
+    });
 
-  // Fetch vehicles, battery types and stations if not loaded
-  useEffect(() => {
-    if (!selectedVehicle && vehicles.length === 0) {
-      dispatch(fetchAllVehicles());
-    }
-    if (batteryTypes.length === 0) {
-      dispatch(fetchAllBatteryTypes());
-    }
-    if (stations.length === 0) {
-      dispatch(fetchAllStations());
-    }
-  }, [
-    dispatch,
-    selectedVehicle,
-    vehicles,
-    batteryTypes.length,
-    stations.length,
-  ]);
+    setFilteredBookings(filtered);
+  };
 
   // Fetch all bookings
   const fetchAllBookings = async () => {
@@ -114,7 +74,7 @@ const BookingPage = () => {
       console.log("Token exists:", !!token);
       if (!token) {
         console.log("No token found in localStorage or cookie");
-        setError("Vui lòng đăng nhập lại để xem booking");
+        setError("Please login again to view bookings");
         setLoadingBookings(false);
         return;
       }
@@ -154,16 +114,27 @@ const BookingPage = () => {
       });
       
       // Parse response từ proxy: { success: true, data: { success: true, message: "OK", data: [...], pagination: null } }
+      let bookingsData: any[] = [];
+      
       if (result.success && result.data?.data && Array.isArray(result.data.data)) {
         console.log("Found bookings:", result.data.data.length);
-        setAllBookings(result.data.data);
+        bookingsData = result.data.data;
       } else if (Array.isArray(result.data)) {
         console.log("Data is array:", result.data.length);
-        setAllBookings(result.data);
+        bookingsData = result.data;
       } else {
         console.log("No bookings found");
-        setAllBookings([]);
+        bookingsData = [];
       }
+      
+      // Sort bookings by date (newest first)
+      const sortedBookings = bookingsData.sort((a, b) => {
+        const dateA = new Date(a.bookingTime || a.createdAt || 0);
+        const dateB = new Date(b.bookingTime || b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setAllBookings(sortedBookings);
     } catch (err) {
       console.error("Error fetching bookings:", err);
     } finally {
@@ -171,523 +142,167 @@ const BookingPage = () => {
     }
   };
 
-  const handleToggleAllBookings = () => {
-    if (!showAllBookings) {
-      fetchAllBookings();
-    }
-    setShowAllBookings(!showAllBookings);
-  };
-
-  const handleCreateBooking = async () => {
-    // Check if dev mode or has API token
-    const devToken = process.env.NEXT_PUBLIC_API_TOKEN;
-    const isDevMode = Boolean(devToken);
-
-    // In dev mode or if not authenticated, use dummy user
-    const userId = user?.userId || (isDevMode ? "12345" : null);
-
-    if (!userId) {
-      setError("Vui lòng đăng nhập để đặt lịch");
-      router.push("/login?redirect=/booking");
-      return;
-    }
-
-    if (!selectedVehicle) {
-      setError("Vui lòng chọn xe");
-      return;
-    }
-
-    if (!stationId || !stationName) {
-      setError("Vui lòng chọn trạm đổi pin");
-      return;
-    }
-
-    if (!bookingTime) {
-      setError("Vui lòng chọn thời gian đặt lịch");
-      return;
-    }
-
-    // Validate booking time is not in the past
-    const now = new Date();
-    if (bookingTime < now) {
-      setError("Thời gian đặt lịch không thể trong quá khứ");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const bookingRequest = {
-        userID: userId,
-        vehicleID: selectedVehicle.vehicleID,
-        stationID: stationId,
-        batteryTypeID: selectedVehicle.batteryTypeID,
-        bookingDays: bookingTime.getDate(),
-        bookingMonth: bookingTime.getMonth() + 1,
-        bookingYear: bookingTime.getFullYear(),
-        bookingHour: bookingTime.getHours(),
-        bookingMinute: bookingTime.getMinutes(),
-      };
-
-      const result = await createBookingUseCase(
-        bookingRepositoryAPI,
-        bookingRequest
-      );
-
-      setBookingData(result);
-      setBookingSuccess(true);
-    } catch (err) {
-      console.error("Error creating booking:", err);
-      setError(err instanceof Error ? err.message : "Không thể tạo booking");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatDisplayTime = (date: Date) => {
-    return date.toLocaleString("vi-VN", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  // Success screen
-  if (bookingSuccess && bookingData) {
-    return (
-      <div className="min-h-screen bg-linear-to-br from-green-50 to-blue-50 flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full bg-white rounded-2xl shadow-2xl p-8">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
-              <FaCheckCircle className="text-5xl text-green-600" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Đặt lịch thành công!
-            </h1>
-            <p className="text-gray-600">
-              Mã đặt lịch:{" "}
-              <span className="font-mono font-semibold">
-                {bookingData.bookingID}
-              </span>
-            </p>
-          </div>
-
-          <div className="space-y-4 mb-8">
-            <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-3">
-              <FaCar className="text-indigo-600 text-xl mt-1" />
-              <div>
-                <p className="text-sm text-gray-600">Xe</p>
-                <p className="font-semibold text-gray-900">
-                  {bookingData.vehicleName}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-3">
-              <FaMapMarkerAlt className="text-red-600 text-xl mt-1" />
-              <div>
-                <p className="text-sm text-gray-600">Trạm</p>
-                <p className="font-semibold text-gray-900">
-                  {bookingData.stationName}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-3">
-              <FaBatteryFull className="text-green-600 text-xl mt-1" />
-              <div>
-                <p className="text-sm text-gray-600">Loại pin</p>
-                <p className="font-semibold text-gray-900">
-                  {bookingData.batteryType}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-3">
-              <FaCalendarAlt className="text-blue-600 text-xl mt-1" />
-              <div>
-                <p className="text-sm text-gray-600">Thời gian đặt</p>
-                <p className="font-semibold text-gray-900">
-                  {new Date(bookingData.bookingTime).toLocaleString("vi-VN")}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-indigo-50 rounded-lg p-4 border-2 border-indigo-200">
-              <div className="flex items-center justify-end">
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Trạng thái</p>
-                  <p className="font-semibold text-green-700 capitalize">
-                    {bookingData.status}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <button
-              onClick={() => router.push("/history")}
-              className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
-            >
-              Xem lịch sử đặt lịch
-            </button>
-            <button
-              onClick={() => router.push("/home")}
-              className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-semibold"
-            >
-              Về trang chủ
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Loading screen
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <FaSpinner className="text-5xl text-indigo-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Đang xử lý đặt lịch...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Booking form
   return (
-    <div className="w-full bg-linear-to-br from-indigo-50 to-blue-50 p-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Đặt lịch đổi pin
-            </h1>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 p-6">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-gray-900">My Bookings</h1>
             <button
-              onClick={handleToggleAllBookings}
-              className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-semibold text-sm flex items-center gap-2"
+              onClick={() => router.push("/findstation")}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold text-sm"
             >
-              <FaHistory />
-              {showAllBookings ? "Ẩn danh sách" : "Xem tất cả booking"}
+              Book New Swap
             </button>
           </div>
+        </div>
 
-          {/* All Bookings List */}
-          {showAllBookings && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Danh sách booking của bạn
-              </h2>
-              {loadingBookings ? (
-                <div className="text-center py-4">
-                  <FaSpinner className="text-2xl text-indigo-600 animate-spin mx-auto" />
-                  <p className="text-sm text-gray-600 mt-2">Đang tải...</p>
-                </div>
-              ) : allBookings.length === 0 ? (
-                <p className="text-sm text-gray-600 text-center py-4">
-                  Chưa có booking nào
-                </p>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {allBookings.map((booking) => (
-                    <div
-                      key={booking.bookingID}
-                      className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {booking.stationName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Mã: {booking.bookingID}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            booking.status === "completed"
-                              ? "bg-green-100 text-green-800"
-                              : booking.status === "pending"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {booking.status}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div>
-                          <span className="font-medium">Xe:</span>{" "}
-                          {booking.vehicleName}
-                        </div>
-                        <div>
-                          <span className="font-medium">Pin:</span>{" "}
-                          {booking.batteryType}
-                        </div>
-                        <div className="col-span-2">
-                          <span className="font-medium">Thời gian:</span>{" "}
-                          {new Date(booking.bookingTime).toLocaleString(
-                            "vi-VN"
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {/* Bookings List */}
+        <div className="bg-white rounded-2xl shadow-xl p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              Your Bookings
+            </h2>
+            
+            {/* Time Filter */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-semibold text-gray-800 whitespace-nowrap">Time Period:</label>
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-4 py-2 text-sm font-semibold border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white hover:border-indigo-400 transition-colors text-gray-900"
+              >
+                <option value="all" className="font-semibold">All Time</option>
+                <option value="today" className="font-semibold">Today</option>
+                <option value="week" className="font-semibold">Last 7 Days</option>
+                <option value="month" className="font-semibold">Last 30 Days</option>
+              </select>
             </div>
-          )}
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded">
+            <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
               <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
 
-          <div className="space-y-4">
-            {/* Vehicle Info */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <FaCar className="text-indigo-600 text-xl" />
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Thông tin xe
-                </h2>
-              </div>
-              {selectedVehicle ? (
-                <div className="space-y-1.5">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Tên xe:</span>{" "}
-                    {selectedVehicle.vehicleName}
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Biển số:</span>{" "}
-                    {selectedVehicle.licensePlate}
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Loại pin:</span>{" "}
-                    {(() => {
-                      const batteryType = batteryTypes.find(
-                        (bt) =>
-                          bt.batteryTypeID === selectedVehicle.batteryTypeID
-                      );
-                      return batteryType
-                        ? `${batteryType.batteryTypeModel} (${batteryType.batteryTypeCapacity}kWh)`
-                        : "N/A";
-                    })()}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-600">
-                  Chưa chọn xe.{" "}
-                  <button
-                    onClick={() => router.push("/home")}
-                    className="text-indigo-600 hover:underline"
-                  >
-                    Chọn xe
-                  </button>
-                </p>
+          {loadingBookings ? (
+            <div className="text-center py-12">
+              <FaSpinner className="text-4xl text-indigo-600 animate-spin mx-auto mb-4" />
+              <p className="text-gray-600">Loading your bookings...</p>
+            </div>
+          ) : filteredBookings.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">📅</div>
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                {allBookings.length === 0 ? "No Bookings Yet" : "No Bookings Found"}
+              </h3>
+              <p className="text-gray-500 mb-6">
+                {allBookings.length === 0 
+                  ? "You haven't made any battery swap bookings yet."
+                  : `No bookings found for ${timeFilter === "today" ? "today" : timeFilter === "week" ? "the last 7 days" : timeFilter === "month" ? "the last 30 days" : "this period"}.`
+                }
+              </p>
+              {allBookings.length === 0 && (
+                <button
+                  onClick={() => router.push("/findstation")}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
+                >
+                  Find a Station
+                </button>
               )}
             </div>
-
-            {/* Station Info */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <FaMapMarkerAlt className="text-red-600 text-xl" />
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Trạm đổi pin
-                </h2>
-              </div>
-              {stationId ? (
-                <p className="text-sm text-gray-700">
-                  <span className="font-semibold">Trạm:</span>{" "}
-                  {stationName || stationId}
-                </p>
-              ) : (
-                <p className="text-sm text-gray-600">
-                  Chưa chọn trạm.{" "}
-                  <button
-                    onClick={() => router.push("/findstation")}
-                    className="text-indigo-600 hover:underline"
-                  >
-                    Tìm trạm
-                  </button>
-                </p>
-              )}
-            </div>
-
-            {/* Booking Time */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <FaClock className="text-blue-600 text-xl" />
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Thời gian đổi pin
-                </h2>
-              </div>
-              <div className="space-y-3">
-                {/* Date Input */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Chọn ngày:
-                  </label>
-                  <input
-                    type="date"
-                    value={bookingTime.toISOString().split('T')[0]}
-                    min={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => {
-                      const newDate = new Date(e.target.value);
-                      newDate.setHours(bookingTime.getHours());
-                      newDate.setMinutes(bookingTime.getMinutes());
-                      
-                      // Validate if selected datetime is not in the past
-                      const now = new Date();
-                      
-                      if (newDate < now) {
-                        setError("Thời gian đặt lịch không thể trong quá khứ");
-                      } else {
-                        setError("");
-                        setBookingTime(newDate);
-                      }
-                    }}
-                    className="w-full px-4 py-3 text-lg font-semibold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
-                    style={{ colorScheme: 'light' }}
-                  />
-                </div>
-
-                {/* Time Input */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Chọn giờ (00:00 - 23:59):
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Hour Select */}
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Giờ</label>
-                      <select
-                        value={bookingTime.getHours()}
-                        onChange={(e) => {
-                          const newDate = new Date(bookingTime);
-                          newDate.setHours(parseInt(e.target.value));
-                          
-                          const now = new Date();
-                          if (newDate < now) {
-                            setError("Thời gian đặt lịch không thể trong quá khứ");
-                          } else {
-                            setError("");
-                            setBookingTime(newDate);
-                          }
-                        }}
-                        className="w-full px-3 py-3 text-lg font-semibold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
-                      >
-                        {Array.from({ length: 24 }, (_, i) => i).map((hour) => {
-                          const now = new Date();
-                          const selectedDate = new Date(bookingTime);
-                          selectedDate.setHours(0, 0, 0, 0);
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          
-                          // Disable if selected date is today and hour is in the past
-                          const isDisabled = selectedDate.getTime() === today.getTime() && hour < now.getHours();
-                          
-                          return (
-                            <option key={hour} value={hour} disabled={isDisabled} style={isDisabled ? { opacity: 0.4 } : {}}>
-                              {String(hour).padStart(2, '0')}
-                            </option>
-                          );
-                        })}
-                      </select>
+          ) : (
+            <div className="space-y-4">
+              {filteredBookings.map((booking) => (
+                <div
+                  key={booking.bookingID}
+                  className="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">
+                        {booking.stationName}
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        ID: {booking.bookingID}
+                      </p>
                     </div>
-                    
-                    {/* Minute Select */}
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        booking.status === "completed"
+                          ? "bg-green-100 text-green-800"
+                          : booking.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : booking.status === "cancelled"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {booking.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm mb-3">
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Phút</label>
-                      <select
-                        value={bookingTime.getMinutes()}
-                        onChange={(e) => {
-                          const newDate = new Date(bookingTime);
-                          newDate.setMinutes(parseInt(e.target.value));
-                          
-                          const now = new Date();
-                          if (newDate < now) {
-                            setError("Thời gian đặt lịch không thể trong quá khứ");
-                          } else {
-                            setError("");
-                            setBookingTime(newDate);
-                          }
-                        }}
-                        className="w-full px-3 py-3 text-lg font-semibold text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
-                      >
-                        {Array.from({ length: 60 }, (_, i) => i).map((minute) => {
-                          const now = new Date();
-                          const selectedDate = new Date(bookingTime);
-                          selectedDate.setHours(0, 0, 0, 0);
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          
-                          // Disable if selected date is today, same hour, and minute is in the past
-                          const isDisabled = 
-                            selectedDate.getTime() === today.getTime() && 
-                            bookingTime.getHours() === now.getHours() && 
-                            minute < now.getMinutes();
-                          
-                          return (
-                            <option key={minute} value={minute} disabled={isDisabled} style={isDisabled ? { opacity: 0.4 } : {}}>
-                              {String(minute).padStart(2, '0')}
-                            </option>
-                          );
+                      <span className="text-gray-600 font-medium">Vehicle:</span>
+                      <p className="text-gray-900 font-semibold">
+                        {booking.vehicleName}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 font-medium">Battery:</span>
+                      <p className="text-gray-900 font-semibold">
+                        {booking.batteryType}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 font-medium">Time:</span>
+                      <p className="text-gray-900 font-semibold">
+                        {new Date(booking.bookingTime).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
-                      </select>
+                      </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Display selected time */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm font-semibold text-blue-900 mb-1">
-                    Thời gian đã chọn:
-                  </p>
-                  <p className="text-base font-bold text-blue-700">
-                    {formatDisplayTime(bookingTime)}
-                  </p>
+                  {/* Pending status - require subscription */}
+                  {booking.status === "pending" && (
+                    <div className="mt-3 pt-3 border-t border-gray-300">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-amber-800 mb-1">
+                              Subscription Required
+                            </h4>
+                            <p className="text-xs text-amber-700 mb-3">
+                              You need an active subscription plan to proceed with this battery swap. Please purchase a plan to continue.
+                            </p>
+                            <button
+                              onClick={() => router.push("/billing-plan")}
+                              className="px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700 transition-colors"
+                            >
+                              View Subscription Plans
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <div className="bg-amber-50 border-l-4 border-amber-500 p-3 rounded">
-                  <p className="text-xs text-amber-800">
-                    <span className="font-semibold">⚠️ Lưu ý:</span> Vui lòng
-                    chọn thời gian trong tương lai. Lịch đặt sẽ
-                    tự động hủy nếu bạn không đến sau 1 giờ.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
-
-            {/* Payment Info */}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={() => router.back()}
-              className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-semibold text-sm"
-            >
-              Quay lại
-            </button>
-            <button
-              onClick={handleCreateBooking}
-              disabled={!selectedVehicle || !stationId || loading}
-              className={`flex-1 px-4 py-2.5 rounded-lg font-semibold transition-colors text-sm ${
-                !selectedVehicle || !stationId || loading
-                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  : "bg-indigo-600 text-white hover:bg-indigo-700"
-              }`}
-            >
-              {loading ? "Đang xử lý..." : "Xác nhận đặt lịch"}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -48,8 +48,23 @@ export async function POST(req: NextRequest) {
     console.log('[Payment API] Backend response data:', JSON.stringify(data, null, 2));
 
     if (!response.ok) {
+      // Extract error message from various formats
+      let errorMessage = "Payment failed";
+      
+      if (typeof data === 'string') {
+        errorMessage = data;
+      } else if (data.message) {
+        errorMessage = data.message;
+      } else if (data.Message) {
+        errorMessage = data.Message;
+      } else if (data.title) {
+        errorMessage = data.title;
+      }
+      
+      console.log('[Payment API] Error message:', errorMessage);
+      
       return NextResponse.json(
-        { success: false, message: data.message || "Payment failed", errors: data.errors },
+        { success: false, message: errorMessage, errors: data.errors },
         { status: response.status }
       );
     }
