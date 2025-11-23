@@ -10,13 +10,50 @@ const BookingPage = () => {
 
   // State management
   const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [filteredBookings, setFilteredBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [error, setError] = useState<string>("");
+  const [timeFilter, setTimeFilter] = useState<string>("all"); // all, today, week, month
 
   // Fetch all bookings on mount
   useEffect(() => {
     fetchAllBookings();
   }, []);
+
+  // Filter bookings when data or filter changes
+  useEffect(() => {
+    filterBookingsByTime();
+  }, [allBookings, timeFilter]);
+
+  // Filter bookings by time
+  const filterBookingsByTime = () => {
+    if (timeFilter === "all") {
+      setFilteredBookings(allBookings);
+      return;
+    }
+
+    const now = new Date();
+    const filtered = allBookings.filter((booking) => {
+      const bookingDate = new Date(booking.bookingTime);
+      
+      switch (timeFilter) {
+        case "today":
+          return bookingDate.toDateString() === now.toDateString();
+        case "week":
+          const weekAgo = new Date(now);
+          weekAgo.setDate(now.getDate() - 7);
+          return bookingDate >= weekAgo;
+        case "month":
+          const monthAgo = new Date(now);
+          monthAgo.setMonth(now.getMonth() - 1);
+          return bookingDate >= monthAgo;
+        default:
+          return true;
+      }
+    });
+
+    setFilteredBookings(filtered);
+  };
 
   // Fetch all bookings
   const fetchAllBookings = async () => {
@@ -77,16 +114,27 @@ const BookingPage = () => {
       });
       
       // Parse response từ proxy: { success: true, data: { success: true, message: "OK", data: [...], pagination: null } }
+      let bookingsData: any[] = [];
+      
       if (result.success && result.data?.data && Array.isArray(result.data.data)) {
         console.log("Found bookings:", result.data.data.length);
-        setAllBookings(result.data.data);
+        bookingsData = result.data.data;
       } else if (Array.isArray(result.data)) {
         console.log("Data is array:", result.data.length);
-        setAllBookings(result.data);
+        bookingsData = result.data;
       } else {
         console.log("No bookings found");
-        setAllBookings([]);
+        bookingsData = [];
       }
+      
+      // Sort bookings by date (newest first)
+      const sortedBookings = bookingsData.sort((a, b) => {
+        const dateA = new Date(a.bookingTime || a.createdAt || 0);
+        const dateB = new Date(b.bookingTime || b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setAllBookings(sortedBookings);
     } catch (err) {
       console.error("Error fetching bookings:", err);
     } finally {
@@ -112,9 +160,26 @@ const BookingPage = () => {
 
         {/* Bookings List */}
         <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Your Bookings
-          </h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              Your Bookings
+            </h2>
+            
+            {/* Time Filter */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-semibold text-gray-800 whitespace-nowrap">Time Period:</label>
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-4 py-2 text-sm font-semibold border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white hover:border-indigo-400 transition-colors text-gray-900"
+              >
+                <option value="all" className="font-semibold">All Time</option>
+                <option value="today" className="font-semibold">Today</option>
+                <option value="week" className="font-semibold">Last 7 Days</option>
+                <option value="month" className="font-semibold">Last 30 Days</option>
+              </select>
+            </div>
+          </div>
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
@@ -127,25 +192,30 @@ const BookingPage = () => {
               <FaSpinner className="text-4xl text-indigo-600 animate-spin mx-auto mb-4" />
               <p className="text-gray-600">Loading your bookings...</p>
             </div>
-          ) : allBookings.length === 0 ? (
+          ) : filteredBookings.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">📅</div>
               <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                No Bookings Yet
+                {allBookings.length === 0 ? "No Bookings Yet" : "No Bookings Found"}
               </h3>
               <p className="text-gray-500 mb-6">
-                You haven't made any battery swap bookings yet.
+                {allBookings.length === 0 
+                  ? "You haven't made any battery swap bookings yet."
+                  : `No bookings found for ${timeFilter === "today" ? "today" : timeFilter === "week" ? "the last 7 days" : timeFilter === "month" ? "the last 30 days" : "this period"}.`
+                }
               </p>
-              <button
-                onClick={() => router.push("/findstation")}
-                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
-              >
-                Find a Station
-              </button>
+              {allBookings.length === 0 && (
+                <button
+                  onClick={() => router.push("/findstation")}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
+                >
+                  Find a Station
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
-              {allBookings.map((booking) => (
+              {filteredBookings.map((booking) => (
                 <div
                   key={booking.bookingID}
                   className="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:shadow-md transition-shadow"

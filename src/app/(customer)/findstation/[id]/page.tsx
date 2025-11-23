@@ -65,13 +65,47 @@ export default function StationBookingPage() {
         setLoading(true);
         const stations = await getAllStationsUseCase(stationRepositoryAPI);
         const foundStation = stations.find((s) => s.stationID === stationId);
-        setStation(foundStation || null);
-
-        // Update URL with station name for breadcrumb
+        
         if (foundStation) {
+          // Fetch availableSlots from search API using station's own location
+          if (selectedVehicle && batteryTypes.length > 0) {
+            try {
+              const batteryType = batteryTypes.find(
+                (bt) => bt.batteryTypeID === selectedVehicle.batteryTypeID
+              );
+              
+              if (batteryType) {
+                // Use station's coordinates to search
+                const searchResults = await stationRepositoryAPI.search({
+                  latitude: foundStation.latitude,
+                  longitude: foundStation.longitude,
+                  batteryType: batteryType.batteryTypeModel as "Small" | "Medium" | "Large",
+                });
+                
+                // Find matching station in search results
+                const searchStation = searchResults.find(
+                  (s) => s.stationName === foundStation.stationName
+                );
+                
+                if (searchStation) {
+                  // Merge availableSlots from search API into station data
+                  (foundStation as any).availableSlots = searchStation.availableSlots;
+                  console.log("✅ Updated station with availableSlots:", searchStation.availableSlots);
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching availableSlots from search API:", error);
+            }
+          }
+          
+          setStation(foundStation || null);
+
+          // Update URL with station name for breadcrumb
           const url = new URL(window.location.href);
           url.searchParams.set("name", foundStation.stationName);
           window.history.replaceState({}, "", url);
+        } else {
+          setStation(null);
         }
       } catch (error) {
         console.error("Error fetching station:", error);
@@ -83,7 +117,7 @@ export default function StationBookingPage() {
     if (stationId) {
       fetchStationDetails();
     }
-  }, [stationId]);
+  }, [stationId, selectedVehicle, batteryTypes]);
 
   // Fetch user subscriptions
   useEffect(() => {
@@ -179,7 +213,34 @@ export default function StationBookingPage() {
       }, 2000);
     } catch (err) {
       console.error("Error creating booking:", err);
-      setError(err instanceof Error ? err.message : "Failed to create booking");
+      
+      // Extract error message from various error formats
+      let errorMessage = "Failed to create booking";
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        const errorObj = err as any;
+        // Check for axios error response
+        if (errorObj.response?.data?.message) {
+          errorMessage = errorObj.response.data.message;
+        } else if (errorObj.response?.data) {
+          errorMessage = typeof errorObj.response.data === 'string' 
+            ? errorObj.response.data 
+            : JSON.stringify(errorObj.response.data);
+        } else if (errorObj.message) {
+          errorMessage = errorObj.message;
+        }
+      }
+      
+      // Improve error messages for better UX
+      if (errorMessage.includes("ongoing swap transaction")) {
+        errorMessage = "⚠️ You have an ongoing swap transaction. Please complete it before creating a new booking.";
+      } else if (errorMessage.includes("existing pending booking") || errorMessage.includes("pending booking")) {
+        errorMessage = "⚠️ You already have a pending booking. Please complete or cancel it before creating a new one.";
+      }
+      
+      setError(errorMessage);
     } finally {
       setBookingLoading(false);
     }
@@ -239,8 +300,10 @@ export default function StationBookingPage() {
     );
   }
 
+  // Priority: availableSlots from search API > batteryInSlots
+  const availableBatteries = (station as any).availableSlots ?? station.batteryInSlots;
   const availabilityPercentage = Math.round(
-    (station.batteryInSlots / station.slotNumber) * 100
+    (availableBatteries / station.stationCapacity) * 100
   );
 
   // Check if booking time is in the past
@@ -287,7 +350,7 @@ export default function StationBookingPage() {
                   <div>
                     <p className="text-xs text-gray-600">Available</p>
                     <p className="text-xl font-bold text-green-700">
-                      {station.batteryOutSlots}
+                      {availableBatteries}
                     </p>
                   </div>
                 </div>
@@ -335,7 +398,7 @@ export default function StationBookingPage() {
                   Battery Status
                 </span>
                 <span className="text-xs text-gray-600">
-                  {station.batteryInSlots}/{station.slotNumber} batteries
+                  {availableBatteries}/{station.stationCapacity} available
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -349,7 +412,7 @@ export default function StationBookingPage() {
             </div>
 
             {/* Status Message */}
-            {station.batteryInSlots > 0 ? (
+            {availableBatteries > 0 ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-green-800 font-medium text-sm">
                    This station has batteries available for swap
@@ -482,15 +545,48 @@ export default function StationBookingPage() {
             ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <p className="text-sm text-yellow-800">
-                  ⚠️ No vehicle information available. Please add a vehicle in the vehicle management section.
+                   No vehicle information available. Please add a vehicle in the vehicle management section.
                 </p>
               </div>
             )}
 
             {/* Error Display */}
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded">
-                <p className="text-sm text-red-700">{error}</p>
+              <div className={`border-l-4 p-4 rounded-lg ${
+                error.includes("ongoing swap transaction") || error.includes("pending booking")
+                  ? "bg-amber-50 border-amber-500"
+                  : "bg-red-50 border-red-500"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {error.includes("ongoing swap transaction") || error.includes("pending booking") ? (
+                      <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${
+                      error.includes("ongoing swap transaction") || error.includes("pending booking")
+                        ? "text-amber-800"
+                        : "text-red-700"
+                    }`}>
+                      {error}
+                    </p>
+                    {(error.includes("ongoing swap transaction") || error.includes("pending booking")) && (
+                      <button
+                        onClick={() => router.push("/history")}
+                        className="mt-2 text-sm font-semibold text-amber-700 hover:text-amber-900 underline"
+                      >
+                        View My Bookings →
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -641,7 +737,7 @@ export default function StationBookingPage() {
             {/* Booking Button */}
             <button
               onClick={handleBooking}
-              disabled={!selectedVehicle || station.batteryInSlots === 0 || bookingLoading || !isBookingTimeValid()}
+              disabled={!selectedVehicle || availableBatteries === 0 || bookingLoading || !isBookingTimeValid()}
               className="w-full bg-gradient-to-r from-indigo-600 to-indigo-800 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-indigo-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2"
             >
               {bookingLoading ? (
@@ -651,8 +747,8 @@ export default function StationBookingPage() {
                 </>
               ) : !selectedVehicle ? (
                 "No Vehicle Selected"
-              ) : station.batteryInSlots === 0 ? (
-                "Station Out of Batteries"
+              ) : availableBatteries === 0 ? (
+                "No Batteries Available"
               ) : (
                 "Book Now"
               )}

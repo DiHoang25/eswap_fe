@@ -63,12 +63,12 @@ function CustomerHomePage() {
   }
   const handleFindStation = () => {
     console.log("Find station clicked");
-    // TODO: Navigate to find station page
+    router.push('/findstation');
   };
 
   const handleViewAllActivities = () => {
     console.log("View all activities clicked");
-    // TODO: Navigate to activities page
+    router.push('/history');
   };
 
   const handleSearchStations = () => {

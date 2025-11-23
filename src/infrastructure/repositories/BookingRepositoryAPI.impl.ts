@@ -19,18 +19,35 @@ class BookingRepositoryAPI implements IBookingRepository {
         response?: {
           status: number;
           statusText: string;
-          data?: { message?: string };
+          data?: { message?: string; Message?: string } | string;
         };
         message?: string;
       };
 
       if (err.response) {
-        throw new Error(
-          `Failed to create booking: ${err.response.status} - ${
-            err.response.data?.message || err.response.statusText
-          }`
-        );
+        // Extract error message from various formats
+        let errorMessage = err.response.statusText;
+        
+        if (err.response.data) {
+          if (typeof err.response.data === 'string') {
+            errorMessage = err.response.data;
+          } else if (err.response.data.message) {
+            errorMessage = err.response.data.message;
+          } else if (err.response.data.Message) {
+            errorMessage = err.response.data.Message;
+          }
+        }
+        
+        // Don't prepend "Failed to create booking" if message already descriptive
+        if (errorMessage.toLowerCase().includes("booking") || 
+            errorMessage.toLowerCase().includes("transaction") ||
+            errorMessage.toLowerCase().includes("swap")) {
+          throw new Error(errorMessage);
+        }
+        
+        throw new Error(`Failed to create booking: ${errorMessage}`);
       }
+     
       throw new Error(err.message || "Failed to create booking");
     }
   }
