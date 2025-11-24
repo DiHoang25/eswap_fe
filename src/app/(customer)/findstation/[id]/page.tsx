@@ -171,12 +171,34 @@ export default function StationBookingPage() {
     const devToken = process.env.NEXT_PUBLIC_API_TOKEN;
     const isDevMode = Boolean(devToken);
 
-    // In dev mode or if not authenticated, use dummy user
-    const userId = user?.userId || (isDevMode ? "12345" : null);
+    // Get userId with fallback to localStorage
+    let userId: string | undefined = user?.userId;
+    
+    // Fallback: try to get from localStorage if AuthContext hasn't loaded yet
+    if (!userId) {
+      try {
+        const userInfoStr = localStorage.getItem('userInfo');
+        if (userInfoStr) {
+          const userInfo = JSON.parse(userInfoStr);
+          userId = userInfo?.userId;
+          console.log("[Booking] Got userId from localStorage:", userId);
+        }
+      } catch (e) {
+        console.error("[Booking] Error parsing userInfo from localStorage:", e);
+      }
+    }
+    
+    // Final fallback for dev mode
+    if (!userId && isDevMode) {
+      userId = "12345";
+    }
+
+    console.log("[Booking Debug] User object:", user);
+    console.log("[Booking Debug] User ID:", userId);
+    console.log("[Booking Debug] Is Dev Mode:", isDevMode);
 
     if (!userId) {
-      setError("Please login to book");
-      router.push("/login?redirect=/findstation/" + stationId);
+      setError("⚠️ Authentication Error - Please login to continue booking. If you're already logged in, try refreshing the page.");
       return;
     }
 

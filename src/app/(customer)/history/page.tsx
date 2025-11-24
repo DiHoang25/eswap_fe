@@ -245,7 +245,7 @@ const HistoryPage = () => {
               <p className="text-2xl font-bold text-indigo-600">{filteredTransactions.length}</p>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
-              <p className="text-sm text-gray-600 mb-1">Pending</p>
+              <p className="text-sm text-gray-600 mb-1">Initiated</p>
               <p className="text-2xl font-bold text-yellow-600">
                 {filteredTransactions.filter(t => (t.status || t.swapStatus || '').toLowerCase() === 'initiated').length}
               </p>

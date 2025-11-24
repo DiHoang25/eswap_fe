@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { FaSearch, FaSyncAlt } from "react-icons/fa";
 import {
@@ -172,9 +174,9 @@ export default function BatteryManagement() {
   };
 
   // Get status label
-  const getStatusLabel = (status: string | null) => {
-    if (status === null) return "Unassigned";
-    return status.charAt(0).toUpperCase() + status.slice(1);
+  const getStatusLabel = (status: string | null | undefined) => {
+    if (!status) return "Unassigned";
+    return status.toUpperCase() + status.slice(1);
   };
 
   // Get health color based on SoH
@@ -439,4 +441,4 @@ export default function BatteryManagement() {
       </div>
     </div>
   );
-});
+}

@@ -14,11 +14,79 @@ const BookingPage = () => {
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [error, setError] = useState<string>("");
   const [timeFilter, setTimeFilter] = useState<string>("all"); // all, today, week, month
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState<string | null>(null);
 
   // Fetch all bookings on mount
   useEffect(() => {
     fetchAllBookings();
   }, []);
+
+  // Open cancel modal
+  const openCancelModal = (bookingId: string) => {
+    setBookingToCancel(bookingId);
+    setShowCancelModal(true);
+  };
+
+  // Close cancel modal
+  const closeCancelModal = () => {
+    setShowCancelModal(false);
+    setBookingToCancel(null);
+  };
+
+  // Cancel booking
+  const handleCancelBooking = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        setError("Please login again");
+        return;
+      }
+
+      const response = await fetch(`/api/booking/update-status`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookingId: bookingToCancel,
+          status: "cancelled"
+        }),
+      });
+
+      const result = await response.json();
+
+      closeCancelModal();
+
+      if (result.success) {
+        // Refresh bookings list
+        await fetchAllBookings();
+        alert("Booking cancelled successfully");
+      } else {
+        const errorMessage = result.error || "Failed to cancel booking";
+        
+        // Check if error is about completed swap transaction
+        if (errorMessage.toLowerCase().includes("cannot cancel a completed swap transaction")) {
+          alert("⚠️ Cannot Cancel\n\nThis booking cannot be cancelled because the swap transaction has already been completed.");
+        } else {
+          alert(errorMessage);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error cancelling booking:", err);
+      const errorMessage = err.message || "Failed to cancel booking";
+      
+      // Check if error is about completed swap transaction
+      if (errorMessage.toLowerCase().includes("cannot cancel a completed swap transaction")) {
+        alert("⚠️ Cannot Cancel\n\nThis booking cannot be cancelled because the swap transaction has already been completed.");
+      } else {
+        alert(errorMessage);
+      }
+    }
+  };
 
   // Filter bookings when data or filter changes
   useEffect(() => {
@@ -274,29 +342,45 @@ const BookingPage = () => {
                   {/* Pending status - require subscription */}
                   {booking.status === "pending" && (
                     <div className="mt-3 pt-3 border-t border-gray-300">
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0">
-                            <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                             </svg>
+                            <div>
+                              <p className="text-xs font-semibold text-amber-800">Subscription Required</p>
+                              <p className="text-xs text-amber-700">Please purchase a plan to continue</p>
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-amber-800 mb-1">
-                              Subscription Required
-                            </h4>
-                            <p className="text-xs text-amber-700 mb-3">
-                              You need an active subscription plan to proceed with this battery swap. Please purchase a plan to continue.
-                            </p>
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => router.push("/billing-plan")}
-                              className="px-4 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700 transition-colors"
+                              className="px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded hover:bg-amber-700 transition-colors whitespace-nowrap"
                             >
-                              View Subscription Plans
+                              Get Plan
+                            </button>
+                            <button
+                              onClick={() => openCancelModal(booking.bookingID)}
+                              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition-colors whitespace-nowrap"
+                            >
+                              Cancel
                             </button>
                           </div>
                         </div>
                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Completed status - show cancel button only */}
+                  {booking.status === "completed" && (
+                    <div className="mt-3 pt-3 border-t border-gray-300 flex justify-end">
+                      <button
+                        onClick={() => openCancelModal(booking.bookingID)}
+                        className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        Cancel Booking
+                      </button>
                     </div>
                   )}
                 </div>
@@ -305,6 +389,34 @@ const BookingPage = () => {
           )}
         </div>
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-3">
+              Cancel Booking
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              Are you sure you want to cancel this booking? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={closeCancelModal}
+                className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                No, Keep It
+              </button>
+              <button
+                onClick={handleCancelBooking}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
