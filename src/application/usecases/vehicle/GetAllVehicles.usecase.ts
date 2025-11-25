@@ -23,14 +23,8 @@ export async function getAllVehiclesUseCase(
 
   try {
     const vehicles = await vehicleRepository.getAll();
-
-    // Log thành công (có thể thêm logging service)
-    console.log(`[UseCase] Successfully fetched ${vehicles.length} vehicles`);
-
     return vehicles;
   } catch (error) {
-    // Log lỗi
-    console.error("[UseCase] Failed to fetch vehicles:", error);
     throw error;
   }
 }

@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
 import { fetchAllVehicles } from "@/application/services/vehicleService";
 import { getBatteryTypeFromId } from "@/domain/entities/Battery";
-import { FiCheck } from "react-icons/fi";
+import { FiCheck, FiRefreshCw } from "react-icons/fi";
 
 // Plan types from API
 interface ApiPlan {
@@ -65,47 +65,89 @@ export default function BillingPlanPage() {
   const [paymentError, setPaymentError] = useState("");
   const [apiPlans, setApiPlans] = useState<ApiPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch subscription plans from API
+  const fetchPlans = async (showLoading = true) => {
+    try {
+      if (showLoading) {
+        setPlansLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      
+      // Get token from localStorage or cookies
+      let token = localStorage.getItem("accessToken");
+      
+      // Fallback to cookies if localStorage is empty
+      if (!token) {
+        const cookies = document.cookie.split(';');
+        const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
+        if (tokenCookie) {
+          token = tokenCookie.split('=')[1];
+          // Restore to localStorage for future use
+          localStorage.setItem("accessToken", token);
+        }
+      }
+      
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
+      // Add cache-busting query parameter to ensure fresh data
+      const cacheBuster = `?t=${Date.now()}`;
+      const response = await fetch(`/api/subscription-plans${cacheBuster}`, { headers });
+      const result = await response.json();
+      
+      if (result.success && Array.isArray(result.data)) {
+        console.log("[BillingPlan] Fetched plans:", result.data.length);
+        console.log("[BillingPlan] Plan names from API:", result.data.map((p: ApiPlan) => p.name));
+        setApiPlans(result.data);
+      } else {
+        console.warn("[BillingPlan] Invalid response format:", result);
+      }
+    } catch (err) {
+      console.error("Error fetching plans:", err);
+    } finally {
+      setPlansLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Initial fetch on mount
   useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        // Get token from localStorage or cookies
-        let token = localStorage.getItem("accessToken");
-        
-        // Fallback to cookies if localStorage is empty
-        if (!token) {
-          const cookies = document.cookie.split(';');
-          const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
-          if (tokenCookie) {
-            token = tokenCookie.split('=')[1];
-            // Restore to localStorage for future use
-            localStorage.setItem("accessToken", token);
-          }
-        }
-        
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch("/api/subscription-plans", { headers });
-        const result = await response.json();
-        
-        if (result.success && Array.isArray(result.data)) {
-          setApiPlans(result.data);
-        }
-      } catch (err) {
-        console.error("Error fetching plans:", err);
-      } finally {
-        setPlansLoading(false);
+    fetchPlans(true);
+  }, []);
+
+  // Auto-refresh when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("[BillingPlan] Page became visible, refreshing plans...");
+        fetchPlans(false);
       }
     };
 
-    fetchPlans();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Auto-refresh every 10 seconds when page is visible (reduced for faster updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && !plansLoading && !refreshing) {
+        console.log("[BillingPlan] Auto-refreshing plans...");
+        fetchPlans(false);
+      }
+    }, 10000); // 10 seconds - reduced for faster updates
+
+    return () => clearInterval(interval);
+  }, [plansLoading, refreshing]);
 
   // Fetch vehicles from Redux if not already loaded
   useEffect(() => {
@@ -156,12 +198,23 @@ export default function BillingPlanPage() {
       targetVehicleType = batteryTypeToVehicleType[batteryType] || "Electric Motorcycle";
     }
 
+    console.log(`[BillingPlan] Total plans from API: ${apiPlans.length}`);
+    console.log(`[BillingPlan] Plan names:`, apiPlans.map(p => p.name));
+
     // Filter and convert plans for this vehicle type
     const filteredPlans = apiPlans
-      .filter(p => getVehicleType(p.name.toLowerCase()) === targetVehicleType)
+      .filter(p => {
+        const planVehicleType = getVehicleType(p.name.toLowerCase());
+        const matches = planVehicleType === targetVehicleType;
+        if (!matches) {
+          console.log(`[BillingPlan] Plan filtered out: ${p.name} (vehicleType: ${planVehicleType}, target: ${targetVehicleType})`);
+        }
+        return matches;
+      })
       .map(convertPlan);
     
     console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${batteryType})`);
+    console.log(`[BillingPlan] Filtered plan names:`, filteredPlans.map(p => p.type));
 
     if (filteredPlans.length > 0) {
       setSelectedPlanType({
@@ -171,10 +224,19 @@ export default function BillingPlanPage() {
       });
     } else {
       // Fallback: show all motorcycle plans if no match
+      console.log(`[BillingPlan] No plans matched, showing all motorcycle plans as fallback`);
       const motorPlans = apiPlans
-        .filter(p => p.name.toLowerCase().includes("xe máy"))
+        .filter(p => {
+          const nameLower = p.name.toLowerCase();
+          const isMotorcycle = nameLower.includes("xe máy");
+          if (!isMotorcycle) {
+            console.log(`[BillingPlan] Fallback filter: ${p.name} is not motorcycle`);
+          }
+          return isMotorcycle;
+        })
         .map(convertPlan);
       
+      console.log(`[BillingPlan] Fallback: ${motorPlans.length} motorcycle plans`);
       setSelectedPlanType({
         vehicleType: "Electric Motorcycle",
         capacity: "2 kWh",
@@ -299,13 +361,21 @@ export default function BillingPlanPage() {
       <div className="w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-6 relative">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Battery Subscription Plans
             </h1>
             <p className="text-base text-gray-600">
               Choose a plan that fits your needs
             </p>
+            <button
+              onClick={() => fetchPlans(false)}
+              disabled={refreshing || plansLoading}
+              className="absolute top-0 right-0 p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh plans"
+            >
+              <FiRefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
+            </button>
           </div>
 
           {/* Horizontal Scrollable Plan Cards */}

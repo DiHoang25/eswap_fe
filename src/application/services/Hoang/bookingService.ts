@@ -4,18 +4,32 @@
 import api from '@/lib/api';
 
 const bookingService = {
-  async getAllBookingOfStation(stationID?: string) {
+  async getAllBookingOfStation(stationID?: string, fromDate?: Date) {
     try {
       // Use axios instance which calls backend directly (same as BookingRepository)
-      // Backend endpoint: GET /api/stations/bookings
+      // Backend endpoint: GET /api/stations/bookings?fromDate=YYYY-MM-DD
       // Backend automatically filters by staff's station
-      const response = await api.get('/stations/bookings');
+      // If fromDate is provided, only return bookings from that date onwards
+      const params: any = {};
+      
+      // Set fromDate to today (00:00:00) if not provided
+      const today = fromDate || new Date();
+      today.setHours(0, 0, 0, 0); // Set to start of day
+      params.fromDate = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      
+      console.log('[bookingService] getAllBookingOfStation with params:', {
+        stationID,
+        fromDate: params.fromDate,
+      });
+      
+      const response = await api.get('/stations/bookings', { params });
       
       // API returns array directly, not wrapped in {data: [...]}
       const data = response.data;
       
       console.log('[bookingService] getAllBookingOfStation response:', {
         stationID,
+        fromDate: params.fromDate,
         responseType: Array.isArray(data) ? 'array' : typeof data,
         count: Array.isArray(data) ? data.length : 0,
       });

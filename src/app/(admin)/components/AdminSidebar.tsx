@@ -40,7 +40,7 @@ const navigationItems: NavigationItem[] = [
     icon: <FaUsers size={20} />,
   },
   {
-    name: "Reports",
+    name: "Subscription Plans",
     path: "/transactions-reports",
     icon: <FaFileInvoiceDollar size={20} />,
   },

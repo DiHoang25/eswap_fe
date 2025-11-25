@@ -60,14 +60,8 @@ export const createVehicle = createAsyncThunk(
       // - etc.
 
       const vehicle = await vehicleRepositoryAPI.create(data);
-
-      // Log thành công
-      console.log(`[VehicleService] Successfully created vehicle: ${vehicle.vehicleID}`);
-
       return vehicle;
     } catch (error) {
-      // Log lỗi
-      console.error("[VehicleService] Failed to create vehicle:", error);
       throw error;
     }
   }
@@ -93,14 +87,8 @@ export const updateVehicle = createAsyncThunk(
       // - etc.
 
       const vehicle = await vehicleRepositoryAPI.update(vehicleId, data);
-
-      // Log thành công
-      console.log(`[VehicleService] Successfully updated vehicle: ${vehicleId}`);
-
       return vehicle;
     } catch (error) {
-      // Log lỗi
-      console.error(`[VehicleService] Failed to update vehicle ${vehicleId}:`, error);
       throw error;
     }
   }
@@ -126,14 +114,8 @@ export const deleteVehicle = createAsyncThunk(
       // - etc.
 
       await vehicleRepositoryAPI.delete(vehicleId);
-
-      // Log thành công
-      console.log(`[VehicleService] Successfully deleted vehicle: ${vehicleId}`);
-
       return vehicleId;
     } catch (error) {
-      // Log lỗi
-      console.error(`[VehicleService] Failed to delete vehicle ${vehicleId}:`, error);
       throw error;
     }
   }

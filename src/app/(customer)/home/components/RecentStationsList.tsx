@@ -6,62 +6,85 @@ interface Station {
   id: string;
   name: string;
   address: string;
-  distance: string;
   imageUrl?: string;
 }
 
 interface RecentStationsListProps {
-  stations?: Station[];
+  stations?: any[];
+  loading?: boolean;
   onSearch?: () => void;
   onStationSelect?: (station: Station) => void;
 }
 
+function transformStationData(station: any): Station {
+  return {
+    id: station.stationID || station.station_id || station.id || Math.random().toString(),
+    name: station.stationName || station.name || 'Unknown Station',
+    address: station.stationLocation || station.location || station.address || '',
+    imageUrl: station.imageUrl || station.image || '/logo.png',
+  };
+}
+
 export default function RecentStationsList({
-  stations = [
-    {
-      id: "1",
-      name: "Nhà Văn hóa Sinh viên",
-      address:
-        "Số 1 Lưu Hữu Phước, Đồng Hoà, Dĩ An, Thành phố Hồ Chí Minh, Việt Nam",
-      distance: "~2km",
-    },
-    {
-      id: "2",
-      name: "Nhà Văn hóa Sinh viên",
-      address:
-        "Số 1 Lưu Hữu Phước, Đồng Hoà, Dĩ An, Thành phố Hồ Chí Minh, Việt Nam",
-      distance: "~2km",
-    },
-    {
-      id: "3",
-      name: "Nhà Văn hóa Sinh viên",
-      address:
-        "Số 1 Lưu Hữu Phước, Đồng Hoà, Dĩ An, Thành phố Hồ Chí Minh, Việt Nam",
-      distance: "~2km",
-    },
-  ],
+  stations = [],
+  loading = false,
   onSearch,
   onStationSelect,
 }: RecentStationsListProps) {
+  const transformedStations = stations.map(transformStationData);
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 h-full">
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <h3 className="text-lg font-semibold text-gray-800">Stations</h3>
+            <button
+              onClick={onSearch}
+              className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <FaSearch size={16} />
+            </button>
+          </div>
+          <div className="flex items-center justify-center flex-1">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-600"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (transformedStations.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 h-full">
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <h3 className="text-lg font-semibold text-gray-800">Stations</h3>
+            <button
+              onClick={onSearch}
+              className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <FaSearch size={16} />
+            </button>
+          </div>
+          <div className="flex items-center justify-center flex-1">
+            <p className="text-gray-500 text-sm">No stations available</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 h-full">
       <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">
-            Recent Stations
-          </h3>
-          <button
-            onClick={onSearch}
-            className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <FaSearch size={16} />
-          </button>
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <h3 className="text-lg font-semibold text-gray-800">Stations</h3>
+          
         </div>
-
-        {/* Stations List */}
-        <div className="flex-1 overflow-y-auto space-y-3">
-          {stations.map((station) => (
+        {/* Stations List - Scrollable with visible scrollbar */}
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-visible min-h-0">
+          {transformedStations.map((station) => (
             <div
               key={station.id}
               onClick={() => onStationSelect?.(station)}
@@ -91,11 +114,6 @@ export default function RecentStationsList({
                 >
                   {station.address}
                 </p>
-              </div>
-
-              {/* Distance */}
-              <div className="text-sm text-gray-600 font-medium">
-                {station.distance}
               </div>
             </div>
           ))}

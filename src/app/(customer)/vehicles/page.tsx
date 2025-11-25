@@ -118,6 +118,8 @@ export default function VehiclesPage() {
         </div>
       )}
 
+     
+
       {/* Loading State */}
       {loading && vehicles.length === 0 ? (
         <div className="flex items-center justify-center h-64">

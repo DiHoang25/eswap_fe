@@ -37,14 +37,11 @@ export default function BatteryStatusCard({
       setLoading(true);
       setError(null);
       try {
-        console.log('[BatteryStatusCard] Fetching battery for vehicle:', selectedVehicle.vehicleID);
         const battery = await batteryRepo.getByVehicle(selectedVehicle.vehicleID);
-        console.log('[BatteryStatusCard] Battery response:', battery);
         
         if (battery && battery.currentPercentage !== null && battery.currentPercentage !== undefined) {
           // Xe có pin - hiển thị thông tin pin
           const percentage = Number(battery.currentPercentage);
-          console.log('[BatteryStatusCard] Battery percentage:', percentage);
           setBatteryLevel(percentage);
           
           // Tính remaining range dựa trên phần trăm pin và loại xe
@@ -56,11 +53,9 @@ export default function BatteryStatusCard({
           };
           const maxRange = capacityMap[selectedVehicle.category] || 200;
           const calculatedRange = Math.round((percentage / 100) * maxRange);
-          console.log('[BatteryStatusCard] Calculated range:', calculatedRange, 'km for category:', selectedVehicle.category);
           setRemainingRange(calculatedRange);
         } else {
           // Xe chưa có pin (API trả về null hoặc không có currentPercentage)
-          console.log('[BatteryStatusCard] No battery found or no currentPercentage');
           setBatteryLevel(null);
           setRemainingRange(0);
         }

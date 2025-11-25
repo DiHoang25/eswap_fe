@@ -14,11 +14,7 @@ class VehicleRepositoryAPI implements IVehicleRepository {
     const endpoint = "/me/vehicles";
 
     try {
-      console.log("Fetching vehicles from URL:", endpoint);
-
       const response = await api.get(endpoint);
-
-      console.log("Raw Vehicle API Response:", response.data);
 
       // Validate response structure
       if (!response.data) {
@@ -39,7 +35,6 @@ class VehicleRepositoryAPI implements IVehicleRepository {
       // Map each vehicle to FE format
       const vehicles: Vehicle[] = vehiclesData.map((v) => this.mapVehicleResponse(v));
 
-      console.log("Vehicles count:", vehicles.length);
       return vehicles;
     } catch (error) {
       const axiosError = error as {
@@ -138,8 +133,6 @@ class VehicleRepositoryAPI implements IVehicleRepository {
     const endpoint = "/vehicles";
 
     try {
-      console.log("Creating vehicle:", data);
-
       // Map FE format to BE format - match exactly with VehicleCreateDto
       // BE DTO structure:
       // - VehicleName: string (Required)
@@ -180,11 +173,7 @@ class VehicleRepositoryAPI implements IVehicleRepository {
         throw new Error("BatteryType is required");
       }
 
-      console.log("Request data to BE:", JSON.stringify(requestData, null, 2));
-
       const response = await api.post(endpoint, requestData);
-
-      console.log("Vehicle created:", response.data);
 
       // Map BE response to FE format
       const vehicleData = response.data.data || response.data;
@@ -261,8 +250,6 @@ class VehicleRepositoryAPI implements IVehicleRepository {
     const endpoint = `/vehicles/${vehicleId}`;
 
     try {
-      console.log("Updating vehicle:", vehicleId, data);
-
       // Map FE format to BE format - match VehicleUpdateDto
       // BE DTO uses PascalCase property names
       const requestData: any = {};
@@ -275,12 +262,10 @@ class VehicleRepositoryAPI implements IVehicleRepository {
       if (data.batteryType !== undefined && data.batteryType) {
         requestData.BatteryType = data.batteryType;
       }
-      // Status: BE expects string enum name (Active, Inactive, Maintenance, Banned)
-      if (data.status !== undefined) requestData.Status = data.status;
+      // Note: Backend does NOT handle Status in UpdateAsync, so we don't send it
+      // Status can only be changed through other business processes
 
       const response = await api.patch(endpoint, requestData);
-
-      console.log("Vehicle updated:", response.data);
 
       // Map BE response to FE format
       const vehicleData = response.data.data || response.data;
@@ -321,11 +306,7 @@ class VehicleRepositoryAPI implements IVehicleRepository {
     const endpoint = `/vehicles/${vehicleId}`;
 
     try {
-      console.log("Deleting vehicle:", vehicleId);
-
       await api.delete(endpoint);
-
-      console.log("Vehicle deleted successfully");
     } catch (error) {
       const axiosError = error as {
         response?: { status: number; statusText: string; data: unknown };

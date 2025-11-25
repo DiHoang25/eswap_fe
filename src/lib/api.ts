@@ -77,20 +77,25 @@ api.interceptors.response.use(
                                     (originalRequest?.params?.vehicleId || 
                                      originalRequest?.url?.includes('vehicleId') ||
                                      errorDetails.message?.toLowerCase().includes('battery not found for the specified vehicle'));
+      // Check if this is a GET /Batteries/station/{stationId}/Batteries request (404 is expected when station has no batteries)
+      const isBatteryByStation404 = error.response.status === 404 && 
+                                    (errorDetails.url?.match(/\/Batteries\/station\/[^\/]+\/Batteries/i) ||
+                                     originalRequest?.url?.match(/\/Batteries\/station\/[^\/]+\/Batteries/i)) &&
+                                    (errorDetails.message?.toLowerCase().includes('no batteries found for the specified station') ||
+                                     errorDetails.message?.toLowerCase().includes('no battery found'));
       const shouldSuppressLog = error.response.status === 401 || 
                                  (error.response.status === 404 && isLogoutError) ||
                                  isGetBookingById405 ||
                                  isSearchBooking405 ||
                                  isPatchBookingById404 ||
                                  isNoAvailableBatteries ||
-                                 isBatteryByVehicle404;
+                                 isBatteryByVehicle404 ||
+                                 isBatteryByStation404;
       
       if (!shouldSuppressLog) {
         console.error('[API Error]', errorDetails);
-      } else {
-        // Log as warning instead of error for suppressed logs
-        console.warn('[API] Suppressed error log:', errorDetails);
       }
+      // Suppressed errors (404 for stations with no batteries, etc.) are silently ignored
 
       // Nếu token hết hạn (401), tự động refresh token
       if (error.response.status === 401 && !originalRequest._retry) {

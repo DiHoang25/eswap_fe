@@ -102,11 +102,10 @@ const vehicleSlice = createSlice({
         state.loading = false;
         state.vehicles.push(action.payload);
         state.lastFetched = Date.now();
-        // Tự động chọn xe vừa tạo nếu chưa có xe nào được chọn
-        if (!state.selectedVehicle) {
-          selectVehicleUseCase(action.payload);
-          state.selectedVehicle = action.payload;
-        }
+        // Tự động chọn xe vừa tạo để backend có thể nhận được vehicleID ngay
+        // Lưu vào localStorage để persist khi reload
+        selectVehicleUseCase(action.payload);
+        state.selectedVehicle = action.payload;
       })
       .addCase(createVehicle.rejected, (state, action) => {
         state.loading = false;

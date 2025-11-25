@@ -321,6 +321,17 @@ export default function CheckInContainer() {
       console.warn('[CheckIn] ⚠️ Failed to dispatch inventory refresh event:', error);
     }
     
+    // Trigger bookings refresh event so reservations page can update
+    // Backend automatically updates booking status when swap is completed
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bookings-refresh'));
+        console.log('[CheckIn] ✅ Dispatched bookings-refresh event');
+      }
+    } catch (error) {
+      console.warn('[CheckIn] ⚠️ Failed to dispatch bookings refresh event:', error);
+    }
+    
     goToCompleted();
   };
 

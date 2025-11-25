@@ -38,17 +38,11 @@ class UserRepositoryAPI implements IUserRepository {
    * Lấy danh sách tất cả người dùng với phân trang
    */
   async getAll(pageNumber: number, pageSize: number): Promise<User[]> {
-    const endpoint = `/users?pageNumber=${pageNumber}&pageSize=${pageSize}`;
+    const endpoint = `/api/users?pageNumber=${pageNumber}&pageSize=${pageSize}`;
     const url = `${this.baseURL}${endpoint}`;
 
     try {
       const token = this.getToken();
-
-      // Debug: log token để kiểm tra
-      console.log(
-        "[UserRepository] Fetching users with token:",
-        token ? "Token exists" : "No token"
-      );
 
       const response = await fetch(url, {
         method: "GET",
@@ -61,10 +55,6 @@ class UserRepositoryAPI implements IUserRepository {
       });
 
       if (!response.ok) {
-        console.error(`API error: ${response.status} ${response.statusText}`);
-        if (response.status === 401) {
-          console.error("Unauthorized: Token may be invalid or expired");
-        }
         throw new Error(`Failed to fetch users from: ${url}`);
       }
 
@@ -76,7 +66,6 @@ class UserRepositoryAPI implements IUserRepository {
 
       return users;
     } catch (error) {
-      console.error("Error fetching users:", error);
       throw error;
     }
   }
