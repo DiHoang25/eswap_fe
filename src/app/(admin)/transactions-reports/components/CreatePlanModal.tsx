@@ -70,13 +70,13 @@ export function CreatePlanModal({
   const getSuggestedKeyword = (batteryType: "Small" | "Medium" | "Large"): string => {
     switch (batteryType) {
       case "Small":
-        return "xe máy";
+        return "motorcycle";
       case "Medium":
-        return "ô tô nhỏ";
+        return "small car";
       case "Large":
-        return "ô tô SUV";
+        return "SUV";
       default:
-        return "xe máy";
+        return "motorcycle";
     }
   };
 
@@ -197,7 +197,7 @@ export function CreatePlanModal({
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder={
               formData.batteryModel
-                ? `e.g., Gói ${suggestedKeyword} - ${formData.tier || "Basic"}`
+                ? `e.g., ${suggestedKeyword} plan - ${formData.tier || "Basic"}`
                 : "Enter plan name"
             }
             required

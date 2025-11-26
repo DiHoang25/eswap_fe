@@ -116,7 +116,10 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
   }, []);
 
   // Helper functions
-  const getBatteryTypeModel = (batteryTypeID?: string): string => {
+  const getBatteryTypeModel = (batteryTypeID?: string, batteryModel?: string): string => {
+    // Priority: use batteryModel from API if available
+    if (batteryModel) return batteryModel;
+    // Fallback: lookup by batteryTypeID
     if (!batteryTypeID) return "Unknown";
     const batteryType = batteryTypes.find((bt) => bt.batteryTypeID === batteryTypeID);
     return batteryType?.batteryTypeModel || "Unknown";
@@ -146,9 +149,9 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
 
   const getVehicleType = (planName: string): string => {
     const nameLower = planName.toLowerCase();
-    if (nameLower.includes("xe máy")) return "Electric Motorcycle";
-    if (nameLower.includes("ô tô nhỏ")) return "Small Electric Car";
-    if (nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv")) return "Electric SUV/Large Car";
+    if (nameLower.includes("motorcycle") || nameLower.includes("xe máy")) return "Electric Motorcycle";
+    if (nameLower.includes("small car") || nameLower.includes("ô tô nhỏ")) return "Small Electric Car";
+    if (nameLower.includes("suv") || nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv")) return "Electric SUV/Large Car";
     return "Electric Vehicle";
   };
 
@@ -455,7 +458,7 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell>{getBatteryTypeModel(plan.batteryTypeID)}</TableCell>
+                <TableCell>{getBatteryTypeModel(plan.batteryTypeID, plan.batteryModel)}</TableCell>
                 <TableCell>
                   <Chip size="sm" variant="flat" color="primary">
                     {plan.planGroup}

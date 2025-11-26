@@ -82,7 +82,7 @@ export default function BatteryStatusCard({
         setError(null);
       } else {
         console.error("Failed to fetch battery info:", err);
-        setError("Không thể tải thông tin pin");
+        setError("Unable to load battery information");
         setBatteryLevel(null);
       }
     } finally {
@@ -162,7 +162,7 @@ export default function BatteryStatusCard({
     return (
       <div className="flex justify-center items-center overflow-visible">
         <div className="text-center p-5">
-          <p className="text-gray-600 text-sm">Chưa chọn xe</p>
+          <p className="text-gray-600 text-sm">No vehicle selected</p>
         </div>
       </div>
     );
@@ -174,7 +174,7 @@ export default function BatteryStatusCard({
       <div className="flex justify-center items-center overflow-visible">
         <div className="text-center p-5">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-          <p className="text-gray-600 text-sm">Đang tải thông tin pin...</p>
+          <p className="text-gray-600 text-sm">Loading battery information...</p>
         </div>
       </div>
     );
@@ -197,25 +197,25 @@ export default function BatteryStatusCard({
       <div className="flex justify-center items-center overflow-visible">
         <div className="flex flex-col justify-center pr-6 p-5 gap-3 text-right">
           <div className="flex flex-col items-end justify-center -mb-2">
-            <div className="text-xs text-gray-500">Trạng thái pin</div>
+            <div className="text-xs text-gray-500">Battery Status</div>
             <div className="text-2xl font-bold text-gray-900">
-              Chưa có pin
+              No Battery
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-100">
             <div className="flex-1">
               <div className="text-sm font-bold text-blue-700 uppercase">
-                Cần đặt lịch đổi pin
+                Book Battery Swap
               </div>
               <div className="text-xs text-blue-600 mt-1">
-                Xe của bạn chưa có pin. Hãy đặt lịch đổi pin đầu tiên.
+                Your vehicle has no battery. Book your first battery swap.
               </div>
             </div>
             <button
               onClick={onFindStation}
               className="px-4 py-2 bg-white border border-blue-700 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
             >
-              Đặt lịch
+              Book Now
             </button>
           </div>
         </div>

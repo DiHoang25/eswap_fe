@@ -125,10 +125,10 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
         {/* Header */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold bg-linear-to-br from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
-            Chỉnh sửa thông tin xe
+            Edit Vehicle Information
           </h2>
           <p className="text-gray-600 mt-1">
-            Cập nhật thông tin xe của bạn
+            Update your vehicle information
           </p>
         </div>
 
@@ -137,7 +137,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           {/* Vehicle Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tên xe <span className="text-red-500">*</span>
+              Vehicle Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -146,7 +146,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 errors.vehicleName ? "border-red-500" : "border-gray-300"
               }`}
-              placeholder="Ví dụ: Xe máy điện của tôi"
+              placeholder="e.g., My Electric Motorcycle"
               disabled={loading}
             />
             {errors.vehicleName && (
@@ -157,14 +157,14 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           {/* License Plate */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Biển số xe
+              License Plate
             </label>
             <input
               type="text"
               value={formData.licensePlate || ""}
               onChange={(e) => handleChange("licensePlate", e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Ví dụ: 30A-12345"
+              placeholder="e.g., 30A-12345"
               disabled={loading}
             />
           </div>
@@ -172,14 +172,14 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           {/* VIN */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Số khung (VIN)
+              VIN (Vehicle Identification Number)
             </label>
             <input
               type="text"
               value={formData.vin || ""}
               onChange={(e) => handleChange("vin", e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Nhập số khung xe"
+              placeholder="Enter vehicle VIN"
               disabled={loading}
             />
           </div>
@@ -188,13 +188,13 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Năm sản xuất
+                Model Year
               </label>
               <input
                 type="text"
                 value={formData.modelYear || ""}
                 onChange={(e) => {
-                  // Chỉ cho phép nhập số
+                  // Only allow numbers
                   const value = e.target.value.replace(/\D/g, "");
                   if (value.length <= 4) {
                     handleChange("modelYear", value);
@@ -214,14 +214,14 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Màu sắc
+                Color
               </label>
               <input
                 type="text"
                 value={formData.color || ""}
                 onChange={(e) => handleChange("color", e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ví dụ: Đỏ, Xanh, Đen"
+                placeholder="e.g., Red, Blue, Black"
                 disabled={loading}
               />
             </div>
@@ -230,7 +230,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
           {/* Battery Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Loại pin
+              Battery Type
             </label>
             <select
               value={formData.batteryType || ""}
@@ -238,7 +238,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               disabled={loading || batteryTypes.length === 0}
             >
-              <option value="">Chọn loại pin</option>
+              <option value="">Select battery type</option>
               {batteryTypes.map((bt) => (
                 <option key={bt.batteryTypeID} value={bt.batteryTypeModel}>
                   {bt.batteryTypeModel} ({bt.batteryTypeCapacity}kWh)
@@ -247,7 +247,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
             </select>
             {batteryTypes.length === 0 && (
               <p className="text-gray-500 text-sm mt-1">
-                Đang tải danh sách loại pin...
+                Loading battery types...
               </p>
             )}
           </div>
@@ -267,7 +267,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               disabled={loading}
               className="px-6 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors duration-200 font-medium disabled:opacity-50"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="submit"
@@ -277,10 +277,10 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                  Đang cập nhật...
+                  Updating...
                 </span>
               ) : (
-                "Cập nhật"
+                "Update"
               )}
             </button>
           </div>
