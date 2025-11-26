@@ -8,14 +8,21 @@ import { stationRepositoryAPI } from "@/infrastructure/repositories/StationRepos
 import { useAppDispatch, useAppSelector } from "@/application/hooks/useRedux";
 import { setMapView, setUserLocation } from "@/application/slices/mapSlice";
 
+// Geolocation error codes (constants)
+const GEOLOCATION_ERROR = {
+  PERMISSION_DENIED: 1,
+  POSITION_UNAVAILABLE: 2,
+  TIMEOUT: 3,
+};
+
 // Helper function để lấy error message từ GeolocationPositionError
 function getGeolocationErrorMessage(error: GeolocationPositionError): string {
   switch (error.code) {
-    case error.PERMISSION_DENIED:
+    case GEOLOCATION_ERROR.PERMISSION_DENIED:
       return "Bạn đã từ chối truy cập vị trí. Vui lòng bật quyền vị trí trong cài đặt trình duyệt.";
-    case error.POSITION_UNAVAILABLE:
+    case GEOLOCATION_ERROR.POSITION_UNAVAILABLE:
       return "Không thể xác định vị trí của bạn. Vui lòng kiểm tra kết nối GPS.";
-    case error.TIMEOUT:
+    case GEOLOCATION_ERROR.TIMEOUT:
       return "Hết thời gian chờ khi lấy vị trí. Vui lòng thử lại.";
     default:
       return `Không thể lấy vị trí: ${error.message || "Lỗi không xác định"}`;
@@ -113,9 +120,8 @@ export default function MapSection() {
           errorMessage,
         });
         
-        // Chỉ hiển thị alert nếu không phải user từ chối permission
-        // (tránh spam alert khi user đã từ chối)
-        if (error.code !== error.PERMISSION_DENIED) {
+        // Không hiển thị alert nếu user từ chối permission (tránh spam)
+        if (error.code !== GEOLOCATION_ERROR.PERMISSION_DENIED) {
           alert(errorMessage);
         }
       },
