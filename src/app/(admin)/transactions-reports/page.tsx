@@ -180,10 +180,9 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
 
   const getVehicleType = (planName: string): string => {
     const nameLower = planName.toLowerCase();
-    // Support both Vietnamese (for backward compatibility) and English keywords
-    if (nameLower.includes("xe máy") || nameLower.includes("motorcycle")) return "Electric Motorcycle";
-    if (nameLower.includes("ô tô nhỏ") || nameLower.includes("small car")) return "Small Electric Car";
-    if (nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv") || nameLower.includes("suv car") || nameLower.includes("electric suv")) return "Electric SUV/Large Car";
+    if (nameLower.includes("motorcycle") || nameLower.includes("xe máy")) return "Electric Motorcycle";
+    if (nameLower.includes("small car") || nameLower.includes("ô tô nhỏ")) return "Small Electric Car";
+    if (nameLower.includes("suv") || nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv")) return "Electric SUV/Large Car";
     return "Electric Vehicle";
   };
 

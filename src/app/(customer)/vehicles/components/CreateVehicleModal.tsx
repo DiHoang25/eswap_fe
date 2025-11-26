@@ -43,10 +43,12 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    // Vehicle Name validation
     if (!formData.vehicleName.trim()) {
       newErrors.vehicleName = "Vehicle name is required";
     }
 
+    // Category validation
     if (!formData.category) {
       newErrors.category = "Vehicle category is required";
     }
@@ -55,6 +57,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
       newErrors.licensePlate = "License plate is required";
     }
 
+    // Battery Type validation
     if (!formData.batteryType) {
       newErrors.batteryType = "Battery type is required";
     }
@@ -132,9 +135,9 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} showCloseButton={true}>
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="mb-6">
+      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header - Fixed */}
+        <div className="mb-6 flex-shrink-0">
           <h2 className="text-2xl font-bold bg-linear-to-br from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
             Add New Vehicle
           </h2>
@@ -143,8 +146,8 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Form - Scrollable */}
+        <form id="vehicle-form" onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 flex-1" style={{ maxHeight: 'calc(90vh - 180px)' }}>
           {/* Vehicle Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -220,6 +223,9 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               placeholder="Enter vehicle VIN"
               disabled={loading}
             />
+            {errors.vin && (
+              <p className="text-red-500 text-sm mt-1">{errors.vin}</p>
+            )}
           </div>
 
           {/* Model Year and Color */}
@@ -232,7 +238,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
                 type="text"
                 value={formData.modelYear}
                 onChange={(e) => {
-                  // Chỉ cho phép nhập số
+                  // Only allow numbers
                   const value = e.target.value.replace(/\D/g, "");
                   if (value.length <= 4) {
                     handleChange("modelYear", value);
@@ -262,6 +268,9 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
                 placeholder="e.g., Red, Blue, Black"
                 disabled={loading}
               />
+              {errors.color && (
+                <p className="text-red-500 text-sm mt-1">{errors.color}</p>
+              )}
             </div>
           </div>
 
@@ -297,7 +306,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
 
           {/* Submit Error */}
           {errors.submit && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4">
               {errors.submit}
             </div>
           )}
@@ -328,6 +337,33 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
             </button>
           </div>
         </form>
+
+        {/* Actions - Fixed at bottom */}
+        <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-gray-200 flex-shrink-0 bg-white">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="px-6 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors duration-200 font-medium disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="vehicle-form"
+            disabled={loading}
+            className="px-6 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Creating...
+              </span>
+            ) : (
+              "Create Vehicle"
+            )}
+          </button>
+        </div>
       </div>
     </Modal>
   );

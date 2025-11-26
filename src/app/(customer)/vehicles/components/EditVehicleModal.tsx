@@ -194,7 +194,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({
                 type="text"
                 value={formData.modelYear || ""}
                 onChange={(e) => {
-                  // Chỉ cho phép nhập số
+                  // Only allow numbers
                   const value = e.target.value.replace(/\D/g, "");
                   if (value.length <= 4) {
                     handleChange("modelYear", value);

@@ -29,6 +29,7 @@ interface ApiPlan {
   description: string;
   durationDays: number;
   maxSwapsPerPeriod: number | null;
+  batteryModel?: string;
 }
 
 // Plan types and data structures
@@ -260,12 +261,38 @@ export default function BillingPlanPage() {
       return;
     }
 
-    // Group plans by vehicle type based on plan name
-    const getVehicleType = (planName: string): string => {
-      if (planName.includes("xe máy")) return "Electric Motorcycle";
-      if (planName.includes("ô tô nhỏ")) return "Small Electric Car";
-      if (planName.includes("ô tô SUV") || planName.includes("ô tô điện suv")) return "Electric SUV/Large Car";
+    // Helper: Get vehicle type from batteryModel
+    const getVehicleTypeFromBatteryModel = (batteryModel?: string): string => {
+      if (!batteryModel) return "Electric Vehicle";
+      const modelLower = batteryModel.toLowerCase();
+      // Map batteryModel to vehicle type
+      if (modelLower.includes("small")) return "Electric Motorcycle";
+      if (modelLower.includes("medium")) return "Small Electric Car";
+      if (modelLower.includes("large")) return "Electric SUV/Large Car";
       return "Electric Vehicle";
+    };
+
+    // Helper: Get battery type from vehicle category
+    const getBatteryTypeFromCategory = (category: string): "Small" | "Medium" | "Large" => {
+      const categoryLower = category.toLowerCase();
+      if (categoryLower.includes("motorcycle") || categoryLower.includes("electricmotorbike")) {
+        return "Small";
+      }
+      if (categoryLower.includes("suv") || categoryLower.includes("electricsuv")) {
+        return "Large";
+      }
+      // SmallElectricCar or default
+      return "Medium";
+    };
+
+    // Helper: Get sort order for batteryModel
+    const getBatteryModelSortOrder = (batteryModel?: string): number => {
+      if (!batteryModel) return 99;
+      const modelLower = batteryModel.toLowerCase();
+      if (modelLower.includes("small")) return 1;
+      if (modelLower.includes("medium")) return 2;
+      if (modelLower.includes("large")) return 3;
+      return 99;
     };
 
     // Convert API plan to PlanDetail
@@ -285,39 +312,62 @@ export default function BillingPlanPage() {
       };
     };
 
-    // Determine vehicle type
+    // Determine vehicle type and battery type from selected vehicle
     let targetVehicleType = "Electric Motorcycle"; // default
-    let batteryType = "Small"; // default
+    let targetBatteryType = "Small"; // default
     
     const vehicle = selectedVehicle || vehicles[0];
     if (vehicle) {
-      batteryType = getBatteryTypeFromId(vehicle.batteryTypeID);
-      console.log(`[BillingPlan] Vehicle: ${vehicle.vehicleName}, batteryTypeID: ${vehicle.batteryTypeID}, batteryType: ${batteryType}`);
-      targetVehicleType = batteryTypeToVehicleType[batteryType] || "Electric Motorcycle";
+      // Get battery type from vehicle category (more reliable than batteryTypeID)
+      targetBatteryType = getBatteryTypeFromCategory(vehicle.category);
+      targetVehicleType = batteryTypeToVehicleType[targetBatteryType] || "Electric Motorcycle";
+      
+      console.log(`[BillingPlan] Selected Vehicle:`, {
+        name: vehicle.vehicleName,
+        category: vehicle.category,
+        batteryTypeID: vehicle.batteryTypeID,
+        determinedBatteryType: targetBatteryType,
+        targetVehicleType: targetVehicleType,
+      });
     }
 
     console.log(`[BillingPlan] Total plans from API: ${apiPlans.length}`);
-    console.log(`[BillingPlan] Plan names:`, apiPlans.map(p => p.name));
+    console.log(`[BillingPlan] Plans with batteryModel:`, apiPlans.map(p => ({ name: p.name, batteryModel: p.batteryModel })));
 
-    // Filter and convert plans for this vehicle type
+    // Filter plans: match by batteryModel from API
     const filteredPlans = apiPlans
       .filter(p => {
-        const planVehicleType = getVehicleType(p.name.toLowerCase());
+        const planVehicleType = getVehicleTypeFromBatteryModel(p.batteryModel);
         const matches = planVehicleType === targetVehicleType;
-        if (!matches) {
-          console.log(`[BillingPlan] Plan filtered out: ${p.name} (vehicleType: ${planVehicleType}, target: ${targetVehicleType})`);
-        }
+        
+        console.log(`[BillingPlan] Plan "${p.name}":`, {
+          batteryModel: p.batteryModel,
+          planVehicleType,
+          targetVehicleType,
+          matches,
+        });
+        
         return matches;
       })
       .map(convertPlan)
       .sort((a, b) => {
-        // Extract numeric price from string (remove ₫ and commas)
+        // Sort by batteryModel order first (Small -> Medium -> Large)
+        const planA = apiPlans.find(p => p.planID === a.planID);
+        const planB = apiPlans.find(p => p.planID === b.planID);
+        const orderA = getBatteryModelSortOrder(planA?.batteryModel);
+        const orderB = getBatteryModelSortOrder(planB?.batteryModel);
+        
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        
+        // If same batteryModel, sort by price
         const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
         const priceB = parseInt(b.price.replace(/[^\d]/g, ''));
-        return priceA - priceB; // Sort ascending (low to high)
+        return priceA - priceB;
       });
     
-    console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${batteryType})`);
+    console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${targetBatteryType})`);
     console.log(`[BillingPlan] Filtered plan names:`, filteredPlans.map(p => p.type));
 
     if (filteredPlans.length > 0) {
@@ -327,17 +377,9 @@ export default function BillingPlanPage() {
         plans: filteredPlans,
       });
     } else {
-      // Fallback: show all motorcycle plans if no match
-      console.log(`[BillingPlan] No plans matched, showing all motorcycle plans as fallback`);
-      const motorPlans = apiPlans
-        .filter(p => {
-          const nameLower = p.name.toLowerCase();
-          const isMotorcycle = nameLower.includes("xe máy");
-          if (!isMotorcycle) {
-            console.log(`[BillingPlan] Fallback filter: ${p.name} is not motorcycle`);
-          }
-          return isMotorcycle;
-        })
+      // Fallback: show all plans if no match (user can see all options)
+      console.log(`[BillingPlan] No plans matched for ${targetVehicleType}, showing all plans`);
+      const allPlans = apiPlans
         .map(convertPlan)
         .sort((a, b) => {
           const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
@@ -345,11 +387,12 @@ export default function BillingPlanPage() {
           return priceA - priceB;
         });
       
-      console.log(`[BillingPlan] Fallback: ${motorPlans.length} motorcycle plans`);
+      console.log(`[BillingPlan] Showing ${allPlans.length} plans as fallback`);
+      
       setSelectedPlanType({
-        vehicleType: "Electric Motorcycle",
-        capacity: "2 kWh",
-        plans: motorPlans,
+        vehicleType: "All Vehicle Types",
+        capacity: "",
+        plans: allPlans,
       });
     }
 

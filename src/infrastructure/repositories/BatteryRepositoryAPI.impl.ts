@@ -6,6 +6,8 @@ import {
 import {
   IBatteryRepository,
   GetBatteriesParams,
+  CreateBatteryParams,
+  CreateBatteryResponse,
 } from "@/domain/repositories/BatteryRepository";
 import api from "@/lib/api";
 
@@ -221,6 +223,86 @@ class BatteryRepositoryAPI implements IBatteryRepository {
 
         throw new Error(
           `Failed to update battery: ${axiosError.message || "Unknown error"}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Tạo pin mới
+   */
+  async create(params: CreateBatteryParams): Promise<CreateBatteryResponse> {
+    const endpoint = "/batteries";
+
+    try {
+      console.log("Creating batteries at URL:", endpoint, "with params:", params);
+
+      const requestBody = {
+        lastStationID: params.lastStationID,
+        batteryTypeName: params.batteryTypeName,
+        quantity: params.quantity,
+        initialSoH: params.initialSoH,
+        initialPercentage: params.initialPercentage,
+      };
+
+      const response = await api.post(endpoint, requestBody);
+
+      console.log("Raw Battery Create API Response:", response.data);
+
+      // API có thể trả về các dạng response khác nhau
+      if (typeof response.data === "string") {
+        return {
+          success: true,
+          message: response.data,
+        };
+      }
+
+      if (response.data && typeof response.data === "object") {
+        const data = response.data as CreateBatteryResponse;
+
+        if (data.success !== undefined && !data.success) {
+          throw new Error(data.message || "Failed to create batteries");
+        }
+
+        console.log("Batteries created successfully");
+        return {
+          success: true,
+          message: data.message || "Batteries created successfully",
+          data: data.data,
+        };
+      }
+
+      return {
+        success: true,
+        message: "Batteries created successfully",
+      };
+    } catch (error) {
+      const axiosError = error as {
+        response?: { status: number; statusText: string; data: unknown };
+        request?: unknown;
+        message?: string;
+      };
+
+      if (axiosError.response) {
+        console.error(
+          `API error: ${axiosError.response.status}`,
+          axiosError.response.data
+        );
+        throw new Error(
+          `Failed to create batteries: ${axiosError.response.status} ${axiosError.response.statusText}`
+        );
+      } else if (axiosError.request) {
+        console.error(
+          "Network error - no response received:",
+          axiosError.request
+        );
+        throw new Error(
+          "Failed to create batteries: Network error. This might be a CORS issue."
+        );
+      } else {
+        console.error("Error setting up request:", axiosError.message);
+        throw new Error(
+          `Failed to create batteries: ${axiosError.message || "Unknown error"}`
         );
       }
     }
