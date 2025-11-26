@@ -247,7 +247,11 @@ export class BatteryRepository implements IBatteryRepository {
     // Returns null if vehicle has no battery (404), throws error for other cases
     try {
       const response = await api.get('/batteries', {
-        params: { vehicleId }
+        params: { vehicleId },
+        // Thêm cache-busting để đảm bảo luôn lấy data mới nhất
+        headers: {
+          'Cache-Control': 'no-cache',
+        }
       });
       let data = response.data.data || response.data;
       
@@ -257,8 +261,16 @@ export class BatteryRepository implements IBatteryRepository {
       }
       
       if (!data) {
+        console.log('[BatteryRepository] No battery data returned for vehicle:', vehicleId);
         return null;
       }
+      
+      console.log('[BatteryRepository] Battery found for vehicle:', {
+        vehicleId,
+        batteryId: data?.BatteryID || data?.batteryID,
+        vehicleID: data?.VehicleID || data?.vehicleID,
+        currentPercentage: data?.CurrentPercentage || data?.currentPercentage,
+      });
       
       // Map backend fields (PascalCase) to frontend Battery interface (camelCase)
       // Backend trả về: BatteryID, CurrentPercentage, BatteryTypeName, etc.

@@ -39,13 +39,32 @@ export async function POST(req: NextRequest) {
       headers: {
         Authorization: token,
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate, br",
       },
     });
 
-    const data = await response.json();
-    
     console.log('[Payment API] Backend response status:', response.status);
-    console.log('[Payment API] Backend response data:', JSON.stringify(data, null, 2));
+    console.log('[Payment API] Backend response headers:', {
+      'content-type': response.headers.get('content-type'),
+      'content-encoding': response.headers.get('content-encoding'),
+      'content-length': response.headers.get('content-length')
+    });
+    
+    // Get text first to debug
+    const responseText = await response.text();
+    console.log('[Payment API] Backend raw response (first 500 chars):', responseText.substring(0, 500));
+    
+    // Parse JSON
+    let data;
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+      console.log('[Payment API] Backend response data:', JSON.stringify(data, null, 2));
+    } catch (parseError) {
+      console.error('[Payment API] JSON parse failed:', parseError);
+      console.error('[Payment API] Raw response:', responseText);
+      throw new Error(`Failed to parse backend response: ${responseText.substring(0, 100)}`);
+    }
 
     if (!response.ok) {
       // Extract error message from various formats

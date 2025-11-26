@@ -58,45 +58,8 @@ function CustomerHomePage() {
     }
   }, [user, loading, router, isProcessingOAuth]);
 
-  // Show loading during OAuth processing or auth check
-  if (isProcessingOAuth || loading || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {isProcessingOAuth ? 'Processing Google login...' : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  const handleFindStation = () => {
-    console.log("Find station clicked");
-    router.push('/findstation');
-  };
-
-  const handleViewAllActivities = () => {
-    console.log("View all activities clicked");
-    router.push('/history');
-  };
-
-  const handleSearchStations = () => {
-    console.log("Search stations clicked");
-    // TODO: Implement search functionality
-  };
-
-  const handleStationSelect = (station: {
-    id: string;
-    name: string;
-    address: string;
-    imageUrl?: string;
-  }) => {
-    console.log("Station selected:", station);
-    // TODO: Navigate to station details or booking
-  };
-
   // Fetch data for home page components
+  // IMPORTANT: This useEffect must be called before any early returns to follow Rules of Hooks
   useEffect(() => {
     if (isProcessingOAuth || loading || !user) return;
 
@@ -226,6 +189,47 @@ function CustomerHomePage() {
       isMounted = false;
     };
   }, [user, loading, isProcessingOAuth, user?.userId]);
+
+  // Handler functions (must be defined before early return)
+  const handleFindStation = () => {
+    console.log("Find station clicked");
+    router.push('/findstation');
+  };
+
+  const handleViewAllActivities = () => {
+    console.log("View all activities clicked");
+    router.push('/history');
+  };
+
+  const handleSearchStations = () => {
+    console.log("Search stations clicked");
+    // TODO: Implement search functionality
+  };
+
+  const handleStationSelect = (station: {
+    id: string;
+    name: string;
+    address: string;
+    imageUrl?: string;
+  }) => {
+    console.log("Station selected:", station);
+    // TODO: Navigate to station details or booking
+  };
+
+  // Show loading during OAuth processing or auth check
+  // IMPORTANT: Early return must be AFTER all hooks to follow Rules of Hooks
+  if (isProcessingOAuth || loading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">
+            {isProcessingOAuth ? 'Processing Google login...' : 'Loading...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">

@@ -83,6 +83,10 @@ api.interceptors.response.use(
                                      originalRequest?.url?.match(/\/Batteries\/station\/[^\/]+\/Batteries/i)) &&
                                     (errorDetails.message?.toLowerCase().includes('no batteries found for the specified station') ||
                                      errorDetails.message?.toLowerCase().includes('no battery found'));
+      // Check if this is a GET /bookings/customer/{customerId} request (404 is expected when customer has no bookings)
+      const isBookingByCustomer404 = error.response.status === 404 && 
+                                     (errorDetails.url?.match(/\/bookings\/customer\/[^\/]+/i) ||
+                                      originalRequest?.url?.match(/\/bookings\/customer\/[^\/]+/i));
       const shouldSuppressLog = error.response.status === 401 || 
                                  (error.response.status === 404 && isLogoutError) ||
                                  isGetBookingById405 ||
@@ -90,7 +94,8 @@ api.interceptors.response.use(
                                  isPatchBookingById404 ||
                                  isNoAvailableBatteries ||
                                  isBatteryByVehicle404 ||
-                                 isBatteryByStation404;
+                                 isBatteryByStation404 ||
+                                 isBookingByCustomer404;
       
       if (!shouldSuppressLog) {
         console.error('[API Error]', errorDetails);

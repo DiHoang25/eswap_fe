@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { FaBars } from "react-icons/fa";
@@ -37,28 +37,31 @@ const SideBar: React.FC<SideBarUIProps> = ({
   isAdmin = false,
 }) => {
   const { user: authUser, loading: authLoading } = useAuth();
+  const [tokenNameFallback, setTokenNameFallback] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Prefer explicit prop `user`, then auth context, then try decoding token for an immediate name
-  const tokenNameFallback = (() => {
+  // Only read from localStorage after component mounts (after hydration)
+  useEffect(() => {
+    setIsMounted(true);
     try {
-      if (typeof window !== "undefined") {
-        const t = localStorage.getItem("accessToken");
-        if (t) {
-          const parts = t.split(".");
-          if (parts.length >= 2) {
-            const p = JSON.parse(atob(parts[1]));
-            return p.unique_name || p.name || p.email || p.username || null;
-          }
+      const t = localStorage.getItem("accessToken");
+      if (t) {
+        const parts = t.split(".");
+        if (parts.length >= 2) {
+          const p = JSON.parse(atob(parts[1]));
+          const name = p.unique_name || p.name || p.email || p.username || null;
+          setTokenNameFallback(name);
         }
       }
     } catch (e) {
       // ignore
     }
-    return null;
-  })();
+  }, []);
 
+  // Prefer explicit prop `user`, then auth context, then try decoding token for an immediate name
+  // Use tokenNameFallback only after mount to avoid hydration mismatch
   const displayedName =
-    user?.name || authUser?.name || tokenNameFallback || authUser?.email || "";
+    user?.name || authUser?.name || (isMounted ? tokenNameFallback : null) || authUser?.email || "";
   const displayedAvatar = user?.avatarUrl || authUser?.avatar || undefined;
   const displayedInitials =
     user?.initials ||

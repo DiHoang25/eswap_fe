@@ -310,10 +310,10 @@ export default withStaffAuth(function ReservationsPage() {
           );
         }
       },
-      { key: 'time', header: 'Time' },
-      { key: 'driver', header: 'Customer' },
-      { key: 'vehicle', header: 'License Plate' },
-      { key: 'battery', header: 'Battery Type' },
+    { key: 'time', header: 'Time' },
+    { key: 'driver', header: 'Customer' },
+    { key: 'vehicle', header: 'License Plate' },
+    { key: 'battery', header: 'Battery Type' },
     ];
 
     // Chỉ thêm cột status ở tab "Đang có booking tới" (upcoming)
@@ -728,16 +728,16 @@ export default withStaffAuth(function ReservationsPage() {
       <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <button
+              <button
               onClick={() => setFilterStatus('upcoming')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                 filterStatus === 'upcoming'
                   ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
               Upcoming
-            </button>
+              </button>
             <button
               onClick={() => setFilterStatus('completed')}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${

@@ -122,9 +122,8 @@ class BookingRepositoryAPI implements IBookingRepository {
     status: string
   ): Promise<BookingDTO> {
     try {
-      const response = await api.put(`/api/bookings/${bookingId}/status`, {
-        status,
-      });
+      // API expects status as query parameter, not in body
+      const response = await api.patch(`/api/bookings/${bookingId}?status=${status}`);
 
       console.log("Update Booking Status Response:", response.data);
 
@@ -136,17 +135,26 @@ class BookingRepositoryAPI implements IBookingRepository {
         response?: {
           status: number;
           statusText: string;
-          data?: { message?: string };
+          data?: { message?: string; Message?: string } | string;
         };
         message?: string;
       };
 
       if (err.response) {
-        throw new Error(
-          `Failed to update booking status: ${err.response.status} - ${
-            err.response.data?.message || err.response.statusText
-          }`
-        );
+        // Extract error message from various formats
+        let errorMessage = err.response.statusText;
+        
+        if (err.response.data) {
+          if (typeof err.response.data === 'string') {
+            errorMessage = err.response.data;
+          } else if (err.response.data.message) {
+            errorMessage = err.response.data.message;
+          } else if (err.response.data.Message) {
+            errorMessage = err.response.data.Message;
+          }
+        }
+        
+        throw new Error(`Failed to update booking status: ${errorMessage}`);
       }
       throw new Error(err.message || "Failed to update booking status");
     }

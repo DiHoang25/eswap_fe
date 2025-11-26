@@ -1,12 +1,23 @@
 "use client";
 
 import { withCustomerAuth } from '@/hoc/withAuth';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
 import { fetchAllVehicles } from "@/application/services/vehicleService";
 import { getBatteryTypeFromId } from "@/domain/entities/Battery";
 import { FiCheck, FiRefreshCw } from "react-icons/fi";
+
+// Payment history interface
+interface PaymentHistory {
+  paymentID: string;
+  userName: string;
+  email: string;
+  planName: string;
+  method: string;
+  amount: number;
+  paidAt: string;
+}
 
 // Plan types from API
 interface ApiPlan {
@@ -66,6 +77,13 @@ export default function BillingPlanPage() {
   const [apiPlans, setApiPlans] = useState<ApiPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(10);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyTotalItems, setHistoryTotalItems] = useState(0);
+  const modalOverlayRef = useRef<HTMLDivElement>(null);
 
   // Fetch subscription plans from API
   const fetchPlans = async (showLoading = true) => {
@@ -122,6 +140,40 @@ export default function BillingPlanPage() {
     fetchPlans(true);
   }, []);
 
+  // Manage body scroll when modal opens/closes
+  useEffect(() => {
+    if (showPaymentModal) {
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Restore body scroll when modal is closed
+      document.body.style.overflow = '';
+      // Let React handle the removal - don't force remove elements
+    }
+    
+    // Cleanup: ensure body scroll is restored on unmount
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showPaymentModal]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showPaymentModal) {
+        setShowPaymentModal(false);
+        setPaymentError("");
+      }
+    };
+    
+    if (showPaymentModal) {
+      document.addEventListener('keydown', handleEsc);
+      return () => {
+        document.removeEventListener('keydown', handleEsc);
+      };
+    }
+  }, [showPaymentModal]);
+
   // Auto-refresh when page becomes visible (user switches back to tab)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -148,6 +200,52 @@ export default function BillingPlanPage() {
 
     return () => clearInterval(interval);
   }, [plansLoading, refreshing]);
+  // Fetch payment history
+  useEffect(() => {
+    const fetchPaymentHistory = async () => {
+      try {
+        let token = localStorage.getItem("accessToken");
+        
+        if (!token) {
+          const cookies = document.cookie.split(';');
+          const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
+          if (tokenCookie) {
+            token = tokenCookie.split('=')[1];
+          }
+        }
+        
+        if (!token) {
+          console.log("[Payment History] No token found");
+          return;
+        }
+        
+        const response = await fetch(`/api/user/payments?pageNumber=${historyPage}&pageSize=${historyPageSize}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && Array.isArray(result.data)) {
+          setPaymentHistory(result.data);
+          if (result.pagination) {
+            setHistoryTotalPages(result.pagination.totalPages);
+            setHistoryTotalItems(result.pagination.totalItems);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching payment history:", err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    if (isAuthenticated && user) {
+      fetchPaymentHistory();
+    }
+  }, [isAuthenticated, user, historyPage, historyPageSize]);
 
   // Fetch vehicles from Redux if not already loaded
   useEffect(() => {
@@ -211,7 +309,13 @@ export default function BillingPlanPage() {
         }
         return matches;
       })
-      .map(convertPlan);
+      .map(convertPlan)
+      .sort((a, b) => {
+        // Extract numeric price from string (remove ₫ and commas)
+        const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
+        const priceB = parseInt(b.price.replace(/[^\d]/g, ''));
+        return priceA - priceB; // Sort ascending (low to high)
+      });
     
     console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${batteryType})`);
     console.log(`[BillingPlan] Filtered plan names:`, filteredPlans.map(p => p.type));
@@ -234,7 +338,12 @@ export default function BillingPlanPage() {
           }
           return isMotorcycle;
         })
-        .map(convertPlan);
+        .map(convertPlan)
+        .sort((a, b) => {
+          const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
+          const priceB = parseInt(b.price.replace(/[^\d]/g, ''));
+          return priceA - priceB;
+        });
       
       console.log(`[BillingPlan] Fallback: ${motorPlans.length} motorcycle plans`);
       setSelectedPlanType({
@@ -251,6 +360,7 @@ export default function BillingPlanPage() {
     setSelectedPlan(plan);
     setShowPaymentModal(true);
     setPaymentError("");
+    // Body scroll will be managed by useEffect
   };
 
   const handlePayment = async () => {
@@ -488,13 +598,161 @@ export default function BillingPlanPage() {
               ))}
             </div>
           </div>
+
+          {/* Payment History Section */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Payment History</h2>
+            
+            {historyLoading ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <p className="mt-2 text-gray-600">Loading payment history...</p>
+              </div>
+            ) : paymentHistory.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <p className="text-gray-600">No payment history found</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Payment ID
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Plan Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Method
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Amount
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Paid At
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {paymentHistory.map((payment) => (
+                        <tr key={payment.paymentID} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm font-medium text-gray-900 font-mono">
+                              {payment.paymentID.substring(0, 8)}...
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-medium text-gray-900">
+                              {payment.planName}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {payment.method}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm font-bold text-indigo-600">
+                              {payment.amount.toLocaleString("vi-VN")} ₫
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm text-gray-600">
+                              {new Date(payment.paidAt).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                                timeZone: "UTC",
+                              })}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination Controls */}
+                {historyTotalPages > 1 && (
+                  <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing page {historyPage} of {historyTotalPages} ({historyTotalItems} total payments)
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                        disabled={historyPage === 1}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, historyTotalPages) }, (_, i) => {
+                          let pageNum;
+                          if (historyTotalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (historyPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (historyPage >= historyTotalPages - 2) {
+                            pageNum = historyTotalPages - 4 + i;
+                          } else {
+                            pageNum = historyPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setHistoryPage(pageNum)}
+                              className={`w-10 h-10 text-sm font-medium rounded-lg transition-colors ${
+                                historyPage === pageNum
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => setHistoryPage(p => Math.min(historyTotalPages, p + 1))}
+                        disabled={historyPage === historyTotalPages}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedPlan && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      {showPaymentModal && selectedPlan ? (
+        <div 
+          ref={modalOverlayRef}
+          key="payment-modal-overlay"
+          data-modal-active="true"
+          className="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowPaymentModal(false);
+            setPaymentError("");
+            setSelectedPlan(null);
+            // Body scroll will be restored by useEffect
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
               Confirm Payment
             </h2>
@@ -556,6 +814,8 @@ export default function BillingPlanPage() {
                       <button
                         onClick={() => {
                           setShowPaymentModal(false);
+                          setPaymentError("");
+                          // Body scroll will be restored by useEffect
                           window.location.href = "/findstation";
                         }}
                         className="mt-2 text-sm font-semibold text-amber-700 hover:text-amber-900 underline"
@@ -573,6 +833,7 @@ export default function BillingPlanPage() {
                 onClick={() => {
                   setShowPaymentModal(false);
                   setPaymentError("");
+                  // Body scroll will be restored by useEffect
                 }}
                 disabled={paymentLoading}
                 className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-semibold disabled:opacity-50"
@@ -599,7 +860,7 @@ export default function BillingPlanPage() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

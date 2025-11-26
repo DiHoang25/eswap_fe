@@ -12,7 +12,7 @@ class UserRepositoryAPI implements IUserRepository {
   constructor() {
     this.baseURL =
       process.env.NEXT_PUBLIC_API_URL ||
-      "https://gr4-swp-be2-sp25.onrender.com";
+      "https://gr4-swp-be2-sp25.onrender.com/api";
 
     if (!this.baseURL) {
       console.error("Base URL is not defined");
@@ -38,8 +38,11 @@ class UserRepositoryAPI implements IUserRepository {
    * Lấy danh sách tất cả người dùng với phân trang
    */
   async getAll(pageNumber: number, pageSize: number): Promise<User[]> {
-    const endpoint = `/api/users?pageNumber=${pageNumber}&pageSize=${pageSize}`;
+    // baseURL đã có /api, nên endpoint không cần /api nữa
+    const endpoint = `/users?pageNumber=${pageNumber}&pageSize=${pageSize}`;
     const url = `${this.baseURL}${endpoint}`;
+    
+    console.log('[UserRepositoryAPI] Fetching users from:', url);
 
     try {
       const token = this.getToken();
@@ -74,7 +77,7 @@ class UserRepositoryAPI implements IUserRepository {
    * Lấy thông tin user theo ID
    */
   async getById(userID: string): Promise<User | null> {
-    const endpoint = `/api/users/${userID}`;
+    const endpoint = `/users/${userID}`;
     const url = `${this.baseURL}${endpoint}`;
 
     try {
@@ -109,7 +112,7 @@ class UserRepositoryAPI implements IUserRepository {
    * Xóa user theo ID
    */
   async delete(userID: string): Promise<void> {
-    const endpoint = `/api/users/${userID}`;
+    const endpoint = `/users/${userID}`;
     const url = `${this.baseURL}${endpoint}`;
 
     try {

@@ -8,6 +8,20 @@ import { stationRepositoryAPI } from "@/infrastructure/repositories/StationRepos
 import { useAppDispatch, useAppSelector } from "@/application/hooks/useRedux";
 import { setMapView, setUserLocation } from "@/application/slices/mapSlice";
 
+// Helper function để lấy error message từ GeolocationPositionError
+function getGeolocationErrorMessage(error: GeolocationPositionError): string {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return "Bạn đã từ chối truy cập vị trí. Vui lòng bật quyền vị trí trong cài đặt trình duyệt.";
+    case error.POSITION_UNAVAILABLE:
+      return "Không thể xác định vị trí của bạn. Vui lòng kiểm tra kết nối GPS.";
+    case error.TIMEOUT:
+      return "Hết thời gian chờ khi lấy vị trí. Vui lòng thử lại.";
+    default:
+      return `Không thể lấy vị trí: ${error.message || "Lỗi không xác định"}`;
+  }
+}
+
 export default function MapSection() {
   // Redux state and dispatch
   const dispatch = useAppDispatch();
@@ -91,10 +105,19 @@ export default function MapSection() {
         }
       },
       (error) => {
-        console.error("Lỗi khi lấy vị trí:", error);
-        alert(
-          "Không thể lấy vị trí của bạn. Vui lòng cho phép truy cập vị trí."
-        );
+        // Log chi tiết error để debug
+        const errorMessage = getGeolocationErrorMessage(error);
+        console.warn("Lỗi khi lấy vị trí:", {
+          code: error.code,
+          message: error.message,
+          errorMessage,
+        });
+        
+        // Chỉ hiển thị alert nếu không phải user từ chối permission
+        // (tránh spam alert khi user đã từ chối)
+        if (error.code !== error.PERMISSION_DENIED) {
+          alert(errorMessage);
+        }
       },
       {
         enableHighAccuracy: true,
@@ -236,9 +259,15 @@ export default function MapSection() {
           dispatch(setMapView({ center: [latitude, longitude], zoom: 15 }));
         },
         (error) => {
-          console.log(
+          // Log chi tiết error để debug
+          const errorMessage = getGeolocationErrorMessage(error);
+          console.warn(
             "Could not get user location, using saved or default location:",
-            error
+            {
+              code: error.code,
+              message: error.message,
+              errorMessage,
+            }
           );
           // Use saved center from Redux or default
           setupMap(center, zoom);
