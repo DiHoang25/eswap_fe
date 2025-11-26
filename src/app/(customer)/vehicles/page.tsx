@@ -73,9 +73,9 @@ export default function VehiclesPage() {
 
   const getCategoryLabel = (category: string) => {
     const categoryMap: Record<string, string> = {
-      ElectricMotorbike: "Xe máy điện",
-      SmallElectricCar: "Ô tô điện cỡ nhỏ",
-      ElectricSUV: "Ô tô điện SUV",
+      ElectricMotorbike: "Electric Motorbike",
+      SmallElectricCar: "Small Electric Car",
+      ElectricSUV: "Electric SUV",
     };
     return categoryMap[category] || category;
   };
@@ -96,10 +96,10 @@ export default function VehiclesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold bg-linear-to-br from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
-            Quản lý xe của tôi
+            My Vehicles
           </h1>
           <p className="text-gray-600 mt-1">
-            Quản lý thông tin và cài đặt cho các xe của bạn
+            Manage information and settings for your vehicles
           </p>
         </div>
         <button
@@ -107,7 +107,7 @@ export default function VehiclesPage() {
           className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 font-medium shadow-md"
         >
           <FaPlus size={18} />
-          Thêm xe mới
+          Add Vehicle
         </button>
       </div>
 
@@ -125,7 +125,7 @@ export default function VehiclesPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Đang tải danh sách xe...</p>
+            <p className="text-gray-600">Loading vehicles list...</p>
           </div>
         </div>
       ) : vehicles.length === 0 ? (
@@ -133,17 +133,17 @@ export default function VehiclesPage() {
         <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
           <FaCar size={64} className="text-gray-400 mb-4" />
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            Chưa có xe nào
+            No Vehicles Yet
           </h3>
           <p className="text-gray-500 mb-6 text-center max-w-md">
-            Bắt đầu bằng cách thêm xe đầu tiên của bạn để sử dụng dịch vụ đổi pin
+            Get started by adding your first vehicle to use the battery swap service
           </p>
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200 font-medium"
           >
             <FaPlus size={18} />
-            Thêm xe mới
+            Add Vehicle
           </button>
         </div>
       ) : (
@@ -182,26 +182,26 @@ export default function VehiclesPage() {
                 </h3>
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="font-medium">Biển số:</span>
+                    <span className="font-medium">License Plate:</span>
                     <span>{vehicle.licensePlate || "—"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="font-medium">Loại xe:</span>
+                    <span className="font-medium">Category:</span>
                     <span>{getCategoryLabel(vehicle.category)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="font-medium">Pin:</span>
+                    <span className="font-medium">Battery:</span>
                     <span>{getBatteryTypeInfo(vehicle.batteryTypeID)}</span>
                   </div>
                   {vehicle.color && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <span className="font-medium">Màu sắc:</span>
+                      <span className="font-medium">Color:</span>
                       <span>{vehicle.color}</span>
                     </div>
                   )}
                   {vehicle.modelYear && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <span className="font-medium">Năm sản xuất:</span>
+                      <span className="font-medium">Model Year:</span>
                       <span>{vehicle.modelYear}</span>
                     </div>
                   )}
@@ -214,14 +214,14 @@ export default function VehiclesPage() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors duration-200 font-medium"
                   >
                     <FaEdit size={16} />
-                    Sửa
+                    Edit
                   </button>
                   <button
                     onClick={() => handleDeleteClick(vehicle)}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors duration-200 font-medium"
                   >
                     <FaTrash size={16} />
-                    Xóa
+                    Delete
                   </button>
                 </div>
               </div>

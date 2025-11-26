@@ -73,7 +73,7 @@ function SwapDetails({ swapTransaction }: { swapTransaction: any }) {
     try {
       const date = new Date(swapDate);
       if (!isNaN(date.getTime())) {
-        formattedSwapDate = date.toLocaleString('vi-VN', {
+        formattedSwapDate = date.toLocaleString('en-US', {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
@@ -88,7 +88,7 @@ function SwapDetails({ swapTransaction }: { swapTransaction: any }) {
 
   // Format cost - Check if cost is not null/undefined (including 0)
   const formattedCost = cost !== null && cost !== undefined 
-    ? new Intl.NumberFormat('vi-VN', {
+    ? new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'VND',
       }).format(cost) 
@@ -523,7 +523,7 @@ export default withStaffAuth(function ReservationsPage() {
           const date = new Date(bookingTimeStr);
           if (!isNaN(date.getTime())) {
             // Format: "YYYY-MM-DD HH:mm" or "DD/MM/YYYY HH:mm"
-            displayTime = date.toLocaleString('vi-VN', {
+            displayTime = date.toLocaleString('en-US', {
               year: 'numeric',
               month: '2-digit',
               day: '2-digit',

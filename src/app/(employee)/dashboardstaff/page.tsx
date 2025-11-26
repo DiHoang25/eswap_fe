@@ -173,8 +173,8 @@ export default withStaffAuth(function StaffDashboard() {
             if (bookingTimeStr) {
               try {
                 const dt = new Date(bookingTimeStr);
-                dateStr = dt.toLocaleDateString('vi-VN');
-                timeStr = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                dateStr = dt.toLocaleDateString('en-US');
+                timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                 sortDate = dt;
               } catch (e) {
                 console.warn('[Dashboard] Failed to parse date:', bookingTimeStr);
@@ -375,9 +375,9 @@ export default withStaffAuth(function StaffDashboard() {
             try {
               const dt = new Date(bookingTimeStr);
               // Format: DD/MM/YYYY
-              dateStr = dt.toLocaleDateString('vi-VN');
+              dateStr = dt.toLocaleDateString('en-US');
               // Format: HH:mm
-              timeStr = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+              timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
               sortDate = dt;
             } catch (e) {
               console.warn('[dashboardstaff] Failed to parse date:', bookingTimeStr);
@@ -555,7 +555,7 @@ export default withStaffAuth(function StaffDashboard() {
           </div>
           <div className="text-right">
             <div className="text-sm text-blue-100 mb-1">Date</div>
-            <div className="text-xl font-semibold">{new Date().toLocaleDateString('vi-VN')}</div>
+            <div className="text-xl font-semibold">{new Date().toLocaleDateString('en-US')}</div>
           </div>
         </div>
         
@@ -676,7 +676,7 @@ export default withStaffAuth(function StaffDashboard() {
                         <td className="py-3 px-4 text-sm text-gray-600">{licensePlate}</td>
                         <td className="py-3 px-4 text-sm text-gray-600">{bookingTime}</td>
                         <td className="py-3 px-4 text-sm text-gray-900 font-medium">
-                          {typeof cost === 'number' ? `₫${cost.toLocaleString('vi-VN')}` : cost}
+                          {typeof cost === 'number' ? `₫${cost.toLocaleString('en-US')}` : cost}
                         </td>
                         <td className="py-3 px-4">
                           <SwapStatusBadge value={status} />

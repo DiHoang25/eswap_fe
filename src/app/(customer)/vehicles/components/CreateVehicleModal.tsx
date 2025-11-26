@@ -44,25 +44,29 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!formData.vehicleName.trim()) {
-      newErrors.vehicleName = "Tên xe là bắt buộc";
+      newErrors.vehicleName = "Vehicle name is required";
     }
 
     if (!formData.category) {
-      newErrors.category = "Loại xe là bắt buộc";
+      newErrors.category = "Vehicle category is required";
+    }
+
+    if (!formData.licensePlate || !formData.licensePlate.trim()) {
+      newErrors.licensePlate = "License plate is required";
     }
 
     if (!formData.batteryType) {
-      newErrors.batteryType = "Loại pin là bắt buộc";
+      newErrors.batteryType = "Battery type is required";
     }
 
     if (formData.modelYear) {
       if (!/^\d{4}$/.test(formData.modelYear)) {
-        newErrors.modelYear = "Năm sản xuất phải là 4 chữ số";
+        newErrors.modelYear = "Model year must be 4 digits";
       } else {
         const currentYear = new Date().getFullYear();
         const year = parseInt(formData.modelYear, 10);
         if (year > currentYear) {
-          newErrors.modelYear = `Năm sản xuất không được vượt quá năm hiện tại (${currentYear})`;
+          newErrors.modelYear = `Model year cannot exceed current year (${currentYear})`;
         }
       }
     }
@@ -106,7 +110,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
     } catch (error: any) {
       console.error("Failed to create vehicle:", error);
       setErrors({
-        submit: error.message || "Có lỗi xảy ra khi tạo xe. Vui lòng thử lại.",
+        submit: error.message || "An error occurred while creating the vehicle. Please try again.",
       });
     }
   };
@@ -132,10 +136,10 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
         {/* Header */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold bg-linear-to-br from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
-            Thêm xe mới
+            Add New Vehicle
           </h2>
           <p className="text-gray-600 mt-1">
-            Nhập thông tin xe của bạn để bắt đầu sử dụng dịch vụ
+            Enter your vehicle information to start using the service
           </p>
         </div>
 
@@ -144,7 +148,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           {/* Vehicle Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tên xe <span className="text-red-500">*</span>
+              Vehicle Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -153,7 +157,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                 errors.vehicleName ? "border-red-500" : "border-gray-300"
               }`}
-              placeholder="Ví dụ: Xe máy điện của tôi"
+              placeholder="e.g., My Electric Motorbike"
               disabled={loading}
             />
             {errors.vehicleName && (
@@ -164,7 +168,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           {/* Category */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Loại xe <span className="text-red-500">*</span>
+              Vehicle Category <span className="text-red-500">*</span>
             </label>
             <select
               value={formData.category}
@@ -174,9 +178,9 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               }`}
               disabled={loading}
             >
-              <option value="ElectricMotorbike">Xe máy điện</option>
-              <option value="SmallElectricCar">Ô tô điện cỡ nhỏ</option>
-              <option value="ElectricSUV">Ô tô điện SUV</option>
+              <option value="ElectricMotorbike">Electric Motorbike</option>
+              <option value="SmallElectricCar">Small Electric Car</option>
+              <option value="ElectricSUV">Electric SUV</option>
             </select>
             {errors.category && (
               <p className="text-red-500 text-sm mt-1">{errors.category}</p>
@@ -186,29 +190,34 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           {/* License Plate */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Biển số xe
+              License Plate <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={formData.licensePlate}
               onChange={(e) => handleChange("licensePlate", e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Ví dụ: 30A-12345"
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                errors.licensePlate ? "border-red-500" : "border-gray-300"
+              }`}
+              placeholder="e.g., 30A-12345"
               disabled={loading}
             />
+            {errors.licensePlate && (
+              <p className="text-red-500 text-sm mt-1">{errors.licensePlate}</p>
+            )}
           </div>
 
           {/* VIN */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Số khung (VIN)
+              VIN Number
             </label>
             <input
               type="text"
               value={formData.vin}
               onChange={(e) => handleChange("vin", e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Nhập số khung xe"
+              placeholder="Enter vehicle VIN"
               disabled={loading}
             />
           </div>
@@ -217,7 +226,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Năm sản xuất
+                Model Year
               </label>
               <input
                 type="text"
@@ -243,14 +252,14 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Màu sắc
+                Color
               </label>
               <input
                 type="text"
                 value={formData.color}
                 onChange={(e) => handleChange("color", e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ví dụ: Đỏ, Xanh, Đen"
+                placeholder="e.g., Red, Blue, Black"
                 disabled={loading}
               />
             </div>
@@ -259,7 +268,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
           {/* Battery Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Loại pin <span className="text-red-500">*</span>
+              Battery Type <span className="text-red-500">*</span>
             </label>
             <select
               value={formData.batteryType}
@@ -269,7 +278,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               }`}
               disabled={loading || batteryTypes.length === 0}
             >
-              <option value="">Chọn loại pin</option>
+              <option value="">Select battery type</option>
               {batteryTypes.map((bt) => (
                 <option key={bt.batteryTypeID} value={bt.batteryTypeModel}>
                   {bt.batteryTypeModel} ({bt.batteryTypeCapacity}kWh)
@@ -281,7 +290,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
             )}
             {batteryTypes.length === 0 && !errors.batteryType && (
               <p className="text-gray-500 text-sm mt-1">
-                Đang tải danh sách loại pin...
+                Loading battery types...
               </p>
             )}
           </div>
@@ -301,7 +310,7 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               disabled={loading}
               className="px-6 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors duration-200 font-medium disabled:opacity-50"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="submit"
@@ -311,10 +320,10 @@ const CreateVehicleModal: React.FC<CreateVehicleModalProps> = ({
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                  Đang tạo...
+                  Creating...
                 </span>
               ) : (
-                "Tạo xe"
+                "Create Vehicle"
               )}
             </button>
           </div>

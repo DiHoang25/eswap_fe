@@ -13,7 +13,7 @@ const PlanPage = () => {
         <TabsNav tabs={tabs}>
           {/* Nội dung tab Plan */}
           <h2 className="text-xl text-gray-800 font-semibold mb-4">Plans</h2>
-          <p className="text-gray-600">Nội dung tab Plan sẽ được thêm sau.</p>
+          <p className="text-gray-600">Plan tab content will be added later.</p>
         </TabsNav>
       </div>
     </div>

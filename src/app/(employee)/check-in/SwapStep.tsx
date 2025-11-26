@@ -214,7 +214,7 @@ export function SwapStep({
     }
 
     // Confirm cancellation
-    if (!window.confirm('Bạn có chắc chắn muốn hủy swap transaction này?')) {
+    if (!window.confirm('Are you sure you want to cancel this swap transaction?')) {
       return;
     }
 
@@ -231,7 +231,7 @@ export function SwapStep({
 
       showToast({
         type: 'success',
-        message: '✅ Swap transaction đã được hủy thành công!',
+        message: '✅ Swap transaction cancelled successfully!',
         duration: 3000,
       });
 
@@ -445,7 +445,7 @@ export function SwapStep({
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Cost:</span>
                 <span className="font-semibold text-gray-900">
-                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(cost)}
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'VND' }).format(cost)}
                 </span>
               </div>
             )}

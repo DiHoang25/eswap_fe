@@ -6,7 +6,6 @@ import {
   FaChargingStation,
   FaUsers,
   FaFileInvoiceDollar,
-  FaCog,
 } from "react-icons/fa";
 import SideBar, {
   NavigationItem,
@@ -43,11 +42,6 @@ const navigationItems: NavigationItem[] = [
     name: "Subscription Plans",
     path: "/transactions-reports",
     icon: <FaFileInvoiceDollar size={20} />,
-  },
-  {
-    name: "System",
-    path: "/system-config",
-    icon: <FaCog size={20} />,
   },
 ];
 

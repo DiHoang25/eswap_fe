@@ -46,7 +46,7 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
   if (loading && !selectedVehicle) {
     return (
       <div className="relative flex items-center justify-center gap-4 rounded-2xl bg-linear-to-br from-gray-200 to-gray-300 px-2 my-10 ml-20 shadow-lg h-40">
-        <p className="text-gray-600">Đang tải thông tin xe...</p>
+        <p className="text-gray-600">Loading vehicle information...</p>
       </div>
     );
   }
@@ -55,7 +55,7 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
   if (error && !selectedVehicle) {
     return (
       <div className="relative flex items-center justify-center gap-4 rounded-2xl bg-linear-to-br from-red-100 to-red-200 px-2 my-10 ml-20 shadow-lg h-40">
-        <p className="text-red-600">Lỗi: {error}</p>
+        <p className="text-red-600">Error: {error}</p>
       </div>
     );
   }
@@ -64,7 +64,7 @@ const CarInfoCard: React.FC<CarInfoProps> = ({ onSwap }) => {
   if (!selectedVehicle) {
     return (
       <div className="relative flex items-center justify-center gap-4 rounded-2xl bg-linear-to-br from-gray-200 to-gray-300 px-2 my-10 ml-20 shadow-lg h-40">
-        <p className="text-gray-600">Không có thông tin xe</p>
+        <p className="text-gray-600">No vehicle information</p>
       </div>
     );
   }

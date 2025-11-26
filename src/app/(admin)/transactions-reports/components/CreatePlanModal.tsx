@@ -27,10 +27,23 @@ export function CreatePlanModal({
     tier: "",
     price: 0,
     description: "",
-    durationDays: 30,
+    durationDays: 0,
     maxSwapsPerPeriod: null,
   });
   const [error, setError] = useState<string>("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Debug: Log battery types when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      console.log("[CreatePlanModal] Battery types available:", batteryTypes.length);
+      console.log("[CreatePlanModal] Battery types:", batteryTypes.map(bt => ({
+        id: bt.batteryTypeID,
+        model: bt.batteryTypeModel,
+        capacity: bt.batteryTypeCapacity
+      })));
+    }
+  }, [isOpen, batteryTypes]);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -42,10 +55,11 @@ export function CreatePlanModal({
         tier: "",
         price: 0,
         description: "",
-        durationDays: 30,
+        durationDays: 0,
         maxSwapsPerPeriod: null,
       });
       setError("");
+      setFieldErrors({});
     }
   }, [isOpen]);
 
@@ -70,13 +84,13 @@ export function CreatePlanModal({
   const getSuggestedKeyword = (batteryType: "Small" | "Medium" | "Large"): string => {
     switch (batteryType) {
       case "Small":
-        return "xe máy";
+        return "motorcycle";
       case "Medium":
-        return "ô tô nhỏ";
+        return "small car";
       case "Large":
-        return "ô tô SUV";
+        return "SUV car";
       default:
-        return "xe máy";
+        return "motorcycle";
     }
   };
 
@@ -84,29 +98,31 @@ export function CreatePlanModal({
     e.preventDefault();
     setError("");
     
-    // Validation
+    // Field-level validation
+    const newFieldErrors: Record<string, string> = {};
+    
     if (!formData.batteryModel) {
-      setError("Please select a battery model");
-      return;
+      newFieldErrors.batteryModel = "Battery model is required";
     }
     if (!formData.name || formData.name.trim() === "") {
-      setError("Please enter a plan name");
-      return;
+      newFieldErrors.name = "Plan name is required";
     }
     if (!formData.planGroup) {
-      setError("Please select a plan group");
-      return;
+      newFieldErrors.planGroup = "Plan group is required";
     }
     if (!formData.tier || formData.tier.trim() === "") {
-      setError("Please enter a tier");
-      return;
+      newFieldErrors.tier = "Tier is required";
     }
     if (!formData.price || formData.price <= 0) {
-      setError("Please enter a valid price (greater than 0)");
-      return;
+      newFieldErrors.price = "Price must be greater than 0";
     }
-    if (!formData.durationDays || formData.durationDays <= 0) {
-      setError("Please enter a valid duration (greater than 0)");
+    if (!formData.durationDays || formData.durationDays < 1) {
+      newFieldErrors.durationDays = "Duration must be at least 1 day";
+    }
+
+    setFieldErrors(newFieldErrors);
+    
+    if (Object.keys(newFieldErrors).length > 0) {
       return;
     }
 
@@ -117,7 +133,6 @@ export function CreatePlanModal({
       // Extract error message from various possible formats
       let errorMessage = "Failed to create plan";
       
-      // Priority: err.message > err.response.data (string) > err.response.data.message/Message
       if (err?.message) {
         errorMessage = err.message;
       } else if (err?.response?.data) {
@@ -133,14 +148,19 @@ export function CreatePlanModal({
         }
       }
       
-      console.log("[CreatePlanModal] Setting error message:", errorMessage);
       setError(errorMessage);
-      
-      // Scroll to top to show error
-      const formElement = document.querySelector('form');
-      if (formElement) {
-        formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+    }
+  };
+
+  // Clear field error when user types
+  const handleFieldChange = (field: string, value: any) => {
+    setFormData({ ...formData, [field]: value });
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
   };
 
@@ -167,15 +187,14 @@ export function CreatePlanModal({
         )}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Battery Model *
+            Battery Model <span className="text-red-500">*</span>
           </label>
           <select
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+              fieldErrors.batteryModel ? "border-red-500" : "border-gray-300"
+            }`}
             value={formData.batteryModel}
-            onChange={(e) =>
-              setFormData({ ...formData, batteryModel: e.target.value })
-            }
-            required
+            onChange={(e) => handleFieldChange("batteryModel", e.target.value)}
           >
             <option value="">Select battery model</option>
             {batteryTypes.map((bt) => (
@@ -184,24 +203,31 @@ export function CreatePlanModal({
               </option>
             ))}
           </select>
+          {fieldErrors.batteryModel && (
+            <p className="text-red-500 text-sm mt-1">{fieldErrors.batteryModel}</p>
+          )}
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Plan Name *
+            Plan Name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+              fieldErrors.name ? "border-red-500" : "border-gray-300"
+            }`}
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) => handleFieldChange("name", e.target.value)}
             placeholder={
               formData.batteryModel
-                ? `e.g., Gói ${suggestedKeyword} - ${formData.tier || "Basic"}`
+                ? `e.g., ${suggestedKeyword} ${formData.tier || "Basic"} Plan`
                 : "Enter plan name"
             }
-            required
           />
+          {fieldErrors.name && (
+            <p className="text-red-500 text-sm mt-1">{fieldErrors.name}</p>
+          )}
           {formData.batteryModel && (
             <div className="mt-1 text-xs text-gray-500">
               <span className="font-medium">💡 Hint:</span> Plan name should include "
@@ -231,15 +257,14 @@ export function CreatePlanModal({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Plan Group *
+              Plan Group <span className="text-red-500">*</span>
             </label>
             <select
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                fieldErrors.planGroup ? "border-red-500" : "border-gray-300"
+              }`}
               value={formData.planGroup}
-              onChange={(e) =>
-                setFormData({ ...formData, planGroup: e.target.value })
-              }
-              required
+              onChange={(e) => handleFieldChange("planGroup", e.target.value)}
             >
               <option value="">Select plan group</option>
               <option value="Pay_Per_Swap">Pay Per Swap</option>
@@ -247,59 +272,75 @@ export function CreatePlanModal({
               <option value="Monthly_Subscription">Monthly Subscription</option>
               <option value="Annual_Subscription">Annual Subscription</option>
             </select>
+            {fieldErrors.planGroup && (
+              <p className="text-red-500 text-sm mt-1">{fieldErrors.planGroup}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tier *
+              Tier <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                fieldErrors.tier ? "border-red-500" : "border-gray-300"
+              }`}
               value={formData.tier}
-              onChange={(e) => setFormData({ ...formData, tier: e.target.value })}
+              onChange={(e) => handleFieldChange("tier", e.target.value)}
               placeholder="e.g., Basic, Standard, Premium"
-              required
             />
+            {fieldErrors.tier && (
+              <p className="text-red-500 text-sm mt-1">{fieldErrors.tier}</p>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Price (VND) *
+              Price (VND) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              value={formData.price}
-              onChange={(e) =>
-                setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })
-              }
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                fieldErrors.price ? "border-red-500" : "border-gray-300"
+              }`}
+              value={formData.price === 0 ? "" : formData.price}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleFieldChange("price", value === "" ? 0 : parseFloat(value));
+              }}
               min="0"
               step="1000"
-              required
+              placeholder="Enter price"
             />
+            {fieldErrors.price && (
+              <p className="text-red-500 text-sm mt-1">{fieldErrors.price}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Duration (Days) *
+              Duration (Days) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              value={formData.durationDays}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  durationDays: parseInt(e.target.value) || 1,
-                })
-              }
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                fieldErrors.durationDays ? "border-red-500" : "border-gray-300"
+              }`}
+              value={formData.durationDays === 0 ? "" : formData.durationDays}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleFieldChange("durationDays", value === "" ? 0 : parseInt(value));
+              }}
               min="1"
               max="365"
-              required
+              placeholder="Enter days (min: 1)"
             />
+            {fieldErrors.durationDays && (
+              <p className="text-red-500 text-sm mt-1">{fieldErrors.durationDays}</p>
+            )}
           </div>
         </div>
 

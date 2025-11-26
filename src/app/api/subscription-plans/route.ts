@@ -36,6 +36,25 @@ export async function GET(req: NextRequest) {
     
     const data = await response.json();
     console.log('[subscription-plans] Response data:', data);
+    
+    // Debug: Log sample plan to check BatteryTypeID field
+    if (Array.isArray(data?.data) && data.data.length > 0) {
+      console.log('[subscription-plans] Sample plan (first 3):', data.data.slice(0, 3).map((p: any) => ({
+        Name: p.Name,
+        PlanID: p.PlanID,
+        BatteryTypeID: p.BatteryTypeID,
+        BatteryModel: p.BatteryModel,
+        allKeys: Object.keys(p)
+      })));
+    } else if (Array.isArray(data) && data.length > 0) {
+      console.log('[subscription-plans] Sample plan (first 3):', data.slice(0, 3).map((p: any) => ({
+        Name: p.Name,
+        PlanID: p.PlanID,
+        BatteryTypeID: p.BatteryTypeID,
+        BatteryModel: p.BatteryModel,
+        allKeys: Object.keys(p)
+      })));
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (error) {

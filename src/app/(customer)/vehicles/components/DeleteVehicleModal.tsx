@@ -33,7 +33,7 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
       onSuccess();
     } catch (err: any) {
       console.error("Failed to delete vehicle:", err);
-      setError(err.message || "Có lỗi xảy ra khi xóa xe. Vui lòng thử lại.");
+      setError(err.message || "An error occurred while deleting the vehicle. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -50,10 +50,10 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
             </div>
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Xác nhận xóa xe
+            Confirm Delete Vehicle
           </h2>
           <p className="text-gray-600">
-            Bạn có chắc chắn muốn xóa xe này không?
+            Are you sure you want to delete this vehicle?
           </p>
         </div>
 
@@ -61,13 +61,13 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
           <div className="space-y-2">
             <div>
-              <span className="text-sm font-medium text-gray-600">Tên xe:</span>
+              <span className="text-sm font-medium text-gray-600">Vehicle Name:</span>
               <p className="text-gray-800 font-semibold">{vehicle.vehicleName}</p>
             </div>
             {vehicle.licensePlate && (
               <div>
                 <span className="text-sm font-medium text-gray-600">
-                  Biển số:
+                  License Plate:
                 </span>
                 <p className="text-gray-800">{vehicle.licensePlate}</p>
               </div>
@@ -78,9 +78,8 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
         {/* Warning */}
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
           <p className="text-sm text-yellow-800">
-            <strong>Lưu ý:</strong> Hành động này không thể hoàn tác. Xe sẽ bị
-            xóa khỏi danh sách và bạn sẽ không thể sử dụng nó cho các booking
-            mới.
+            <strong>Note:</strong> This action cannot be undone. The vehicle will be
+            removed from your list and you will not be able to use it for new bookings.
           </p>
         </div>
 
@@ -99,7 +98,7 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
             disabled={loading}
             className="px-6 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors duration-200 font-medium disabled:opacity-50"
           >
-            Hủy
+            Cancel
           </button>
           <button
             type="button"
@@ -110,10 +109,10 @@ const DeleteVehicleModal: React.FC<DeleteVehicleModalProps> = ({
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                Đang xóa...
+                Deleting...
               </span>
             ) : (
-              "Xóa xe"
+              "Delete Vehicle"
             )}
           </button>
         </div>

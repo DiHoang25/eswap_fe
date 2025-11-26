@@ -11,18 +11,115 @@ const BookingPage = () => {
   // State management
   const [allBookings, setAllBookings] = useState<any[]>([]);
   const [filteredBookings, setFilteredBookings] = useState<any[]>([]);
+  const [swapTransactions, setSwapTransactions] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [loadingSwaps, setLoadingSwaps] = useState(true); // Track swap loading
   const [error, setError] = useState<string>("");
   const [timeFilter, setTimeFilter] = useState<string>("all"); // all, today, week, month
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState<string | null>(null);
   const [modalKey, setModalKey] = useState(0);
+  const [successMessage, setSuccessMessage] = useState<string>("");
   const modalOverlayRef = useRef<HTMLDivElement>(null);
 
-  // Fetch all bookings on mount
+  // Show success toast
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(""), 3000);
+  };
+
+  // Helper function to normalize datetime for comparison
+  const normalizeDateTime = (dateStr: string): string => {
+    if (!dateStr) return '';
+    // Remove timezone, replace T with space, trim seconds if needed
+    return dateStr.replace('T', ' ').split('.')[0].trim();
+  };
+
+  // Helper function to check if swap is completed for a booking
+  const isSwapCompleted = (bookingId: string, booking?: any): boolean => {
+    // Method 1: Check if booking itself has isSwapCompleted field
+    if (booking) {
+      if (booking.isSwapCompleted === true || booking.IsSwapCompleted === true) {
+        return true;
+      }
+      const bookingSwapStatus = (booking.swapStatus || booking.SwapStatus || '').toLowerCase();
+      if (bookingSwapStatus === 'completed') {
+        return true;
+      }
+    }
+    
+    // Method 2: Check swap transactions - match by bookingTime since BookingID is not available
+    if (swapTransactions.length === 0 || !booking) {
+      return false;
+    }
+    
+    const bookingTime = normalizeDateTime(booking.bookingTime || booking.BookingTime || '');
+    if (!bookingTime) {
+      return false;
+    }
+    
+    // Find swap transaction with matching bookingTime
+    const swap = swapTransactions.find((s: any) => {
+      const swapBookingTime = normalizeDateTime(s.bookingTime || s.BookingTime || '');
+      return swapBookingTime === bookingTime;
+    });
+    
+    if (!swap) {
+      return false;
+    }
+    
+    // Check swap status
+    const swapStatus = (swap.swapStatus || swap.SwapStatus || swap.status || '').toLowerCase();
+    console.log("[BookingPage] Found swap for bookingTime", bookingTime, "status:", swapStatus);
+    return swapStatus === 'completed';
+  };
+
+  // Fetch all bookings and swap transactions on mount
   useEffect(() => {
     fetchAllBookings();
+    fetchSwapTransactions();
   }, []);
+
+  // Fetch swap transactions - try both endpoints
+  const fetchSwapTransactions = async () => {
+    setLoadingSwaps(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        console.log("[BookingPage] No token, skipping swap transactions fetch");
+        setLoadingSwaps(false);
+        return;
+      }
+
+      const { swapTransactionRepository } = await import('@/infrastructure/repositories/Hoang/SwapTransactionRepository');
+      
+      // Try getMySwapTransactions first (user's own transactions)
+      let transactions: any[] = [];
+      
+      try {
+        transactions = await swapTransactionRepository.getMySwapTransactions();
+      } catch (err) {
+        console.log("[BookingPage] getMySwapTransactions failed, trying getAll...");
+      }
+      
+      // If no transactions found, try getAll as fallback
+      if (!transactions || transactions.length === 0) {
+        try {
+          transactions = await swapTransactionRepository.getAll();
+        } catch (err) {
+          console.log("[BookingPage] getAll also failed:", err);
+        }
+      }
+      
+      console.log("[BookingPage] Loaded", transactions?.length || 0, "swap transactions");
+      setSwapTransactions(transactions || []);
+    } catch (err) {
+      console.error("[BookingPage] Error fetching swap transactions:", err);
+      setSwapTransactions([]);
+    } finally {
+      setLoadingSwaps(false);
+    }
+  };
 
   // Manage body scroll when modal opens/closes
   useEffect(() => {
@@ -112,35 +209,46 @@ const BookingPage = () => {
         closeCancelModal();
         // Refresh bookings list
         await fetchAllBookings();
-        alert("Booking cancelled successfully");
+        await fetchSwapTransactions();
+        showSuccess("Booking cancelled successfully!");
       } else {
         closeCancelModal();
-        const errorMessage = result.error || "Failed to cancel booking";
+        const errorMessage = result.error || result.message || "Failed to cancel booking";
         
         // Check if error is about completed swap transaction
-        if (errorMessage.toLowerCase().includes("cannot cancel a completed swap transaction")) {
-          alert("⚠️ Cannot Cancel\n\nThis booking cannot be cancelled because the swap transaction has already been completed.");
+        if (errorMessage.toLowerCase().includes("cannot cancel") && 
+            errorMessage.toLowerCase().includes("swap transaction")) {
+          setError("This booking cannot be cancelled because the battery swap has already been completed.");
+          // Refresh data to update UI
+          await fetchAllBookings();
+          await fetchSwapTransactions();
+          // Clear error after 5 seconds
+          setTimeout(() => setError(""), 5000);
         } else {
-          alert(errorMessage);
+          setError(errorMessage);
+          setTimeout(() => setError(""), 5000);
         }
       }
     } catch (err: any) {
       console.error("Error cancelling booking:", err);
+      closeCancelModal();
       const errorMessage = err.message || "Failed to cancel booking";
       
       // Check if error is about completed swap transaction
-      if (errorMessage.toLowerCase().includes("cannot cancel a completed swap transaction")) {
-        alert("⚠️ Cannot Cancel\n\nThis booking cannot be cancelled because the swap transaction has already been completed.");
+      if (errorMessage.toLowerCase().includes("cannot cancel") && errorMessage.toLowerCase().includes("swap")) {
+        setError("This booking cannot be cancelled because the battery swap has already been completed.");
       } else {
-        alert(errorMessage);
+        setError(errorMessage);
       }
+      setTimeout(() => setError(""), 5000);
     }
   };
 
   // Filter bookings when data or filter changes
+  // Also re-filter when swapTransactions load to update UI
   useEffect(() => {
     filterBookingsByTime();
-  }, [allBookings, timeFilter]);
+  }, [allBookings, timeFilter, swapTransactions]);
 
   // Filter bookings by time
   const filterBookingsByTime = () => {
@@ -251,6 +359,7 @@ const BookingPage = () => {
         return dateB.getTime() - dateA.getTime();
       });
       
+      console.log("[BookingPage] Loaded", sortedBookings.length, "bookings");
       setAllBookings(sortedBookings);
     } catch (err) {
       console.error("Error fetching bookings:", err);
@@ -422,8 +531,8 @@ const BookingPage = () => {
                     </div>
                   )}
                   
-                  {/* Completed status - show cancel button only */}
-                  {booking.status === "completed" && (
+                  {/* Completed status - only show cancel if swap not completed */}
+                  {booking.status === "completed" && !loadingSwaps && !isSwapCompleted(booking.bookingID, booking) && (
                     <div className="mt-3 pt-3 border-t border-gray-300 flex justify-end">
                       <button
                         onClick={() => openCancelModal(booking.bookingID)}
@@ -440,17 +549,17 @@ const BookingPage = () => {
         </div>
       </div>
 
-      {/* Cancel Confirmation Modal */}
+      {/* Cancel Confirmation Modal - No dark overlay */}
       {showCancelModal && (
         <div 
           ref={modalOverlayRef}
           key={`cancel-modal-${modalKey}`}
           data-modal-active="true"
-          className="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4"
           onClick={closeCancelModal}
         >
           <div 
-            className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+            className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 border border-gray-200"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold text-gray-900 mb-3">
@@ -473,6 +582,18 @@ const BookingPage = () => {
                 Yes, Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Toast Notification */}
+      {successMessage && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-medium">{successMessage}</span>
           </div>
         </div>
       )}

@@ -23,22 +23,22 @@ export default function BatteryStatusCard({
 
   // Function để fetch battery info
   const fetchBatteryInfo = React.useCallback(async () => {
-    if (!selectedVehicle) {
-      setBatteryLevel(null);
-      setRemainingRange(0);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+      if (!selectedVehicle) {
+        setBatteryLevel(null);
+        setRemainingRange(0);
+        setError(null);
+        setLoading(false);
+        return;
+      }
 
-    // LUÔN gọi API để check xem xe có pin hay không
-    // Vì Backend không trả về BatteryID trong VehicleResponseDto
-    // Nên ta phải query từ bảng Batteries để biết chính xác
-    setLoading(true);
-    setError(null);
-    try {
-      const battery = await batteryRepo.getByVehicle(selectedVehicle.vehicleID);
-      
+      // LUÔN gọi API để check xem xe có pin hay không
+      // Vì Backend không trả về BatteryID trong VehicleResponseDto
+      // Nên ta phải query từ bảng Batteries để biết chính xác
+      setLoading(true);
+      setError(null);
+      try {
+        const battery = await batteryRepo.getByVehicle(selectedVehicle.vehicleID);
+        
       console.log('[BatteryStatusCard] Battery data:', {
         hasBattery: !!battery,
         batteryId: battery?.batteryId,
@@ -49,45 +49,45 @@ export default function BatteryStatusCard({
       // Logic: Nếu có battery object → xe có pin (không phụ thuộc vào currentPercentage)
       // Chỉ hiển thị "Chưa có pin" khi battery === null (API trả về 404)
       if (battery) {
-        // Xe có pin - hiển thị thông tin pin
+          // Xe có pin - hiển thị thông tin pin
         // Nếu currentPercentage = null/undefined → dùng 0% làm mặc định
         const percentage = battery.currentPercentage !== null && battery.currentPercentage !== undefined
           ? Number(battery.currentPercentage)
           : 0;
         
-        setBatteryLevel(percentage);
-        
-        // Tính remaining range dựa trên phần trăm pin và loại xe
-        // Giả sử: 100% = 200km cho xe máy, 300km cho ô tô nhỏ, 400km cho SUV
-        const capacityMap: Record<string, number> = {
-          "ElectricMotorbike": 200,
-          "SmallElectricCar": 300,
-          "ElectricSUV": 400,
-        };
-        const maxRange = capacityMap[selectedVehicle.category] || 200;
-        const calculatedRange = Math.round((percentage / 100) * maxRange);
-        setRemainingRange(calculatedRange);
-      } else {
+          setBatteryLevel(percentage);
+          
+          // Tính remaining range dựa trên phần trăm pin và loại xe
+          // Giả sử: 100% = 200km cho xe máy, 300km cho ô tô nhỏ, 400km cho SUV
+          const capacityMap: Record<string, number> = {
+            "ElectricMotorbike": 200,
+            "SmallElectricCar": 300,
+            "ElectricSUV": 400,
+          };
+          const maxRange = capacityMap[selectedVehicle.category] || 200;
+          const calculatedRange = Math.round((percentage / 100) * maxRange);
+          setRemainingRange(calculatedRange);
+        } else {
         // Xe chưa có pin (API trả về null - 404)
-        setBatteryLevel(null);
-        setRemainingRange(0);
+          setBatteryLevel(null);
+          setRemainingRange(0);
+        }
+      } catch (err: any) {
+        // Nếu API trả về 404/NotFound → xe chưa có pin (bình thường)
+        // Nếu lỗi khác → hiển thị thông báo lỗi
+        if (err?.response?.status === 404) {
+          // Xe chưa có pin - đây là trạng thái bình thường
+          setBatteryLevel(null);
+          setRemainingRange(0);
+          setError(null);
+        } else {
+          console.error("Failed to fetch battery info:", err);
+        setError("Failed to load battery information");
+          setBatteryLevel(null);
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      // Nếu API trả về 404/NotFound → xe chưa có pin (bình thường)
-      // Nếu lỗi khác → hiển thị thông báo lỗi
-      if (err?.response?.status === 404) {
-        // Xe chưa có pin - đây là trạng thái bình thường
-        setBatteryLevel(null);
-        setRemainingRange(0);
-        setError(null);
-      } else {
-        console.error("Failed to fetch battery info:", err);
-        setError("Không thể tải thông tin pin");
-        setBatteryLevel(null);
-      }
-    } finally {
-      setLoading(false);
-    }
   }, [selectedVehicle, batteryRepo]);
 
   // Fetch battery info khi vehicle thay đổi
@@ -135,7 +135,7 @@ export default function BatteryStatusCard({
       // Delay và retry để đảm bảo backend đã cập nhật xong
       // Backend có thể cần thời gian để commit transaction
       setTimeout(() => {
-        fetchBatteryInfo();
+    fetchBatteryInfo();
       }, 2000); // Tăng delay từ 1s lên 2s
       
       // Retry sau 5 giây nữa nếu vẫn chưa có battery
@@ -162,7 +162,7 @@ export default function BatteryStatusCard({
     return (
       <div className="flex justify-center items-center overflow-visible">
         <div className="text-center p-5">
-          <p className="text-gray-600 text-sm">Chưa chọn xe</p>
+          <p className="text-gray-600 text-sm">No vehicle selected</p>
         </div>
       </div>
     );
@@ -174,7 +174,7 @@ export default function BatteryStatusCard({
       <div className="flex justify-center items-center overflow-visible">
         <div className="text-center p-5">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-          <p className="text-gray-600 text-sm">Đang tải thông tin pin...</p>
+          <p className="text-gray-600 text-sm">Loading battery information...</p>
         </div>
       </div>
     );
@@ -197,25 +197,25 @@ export default function BatteryStatusCard({
       <div className="flex justify-center items-center overflow-visible">
         <div className="flex flex-col justify-center pr-6 p-5 gap-3 text-right">
           <div className="flex flex-col items-end justify-center -mb-2">
-            <div className="text-xs text-gray-500">Trạng thái pin</div>
+            <div className="text-xs text-gray-500">Battery Status</div>
             <div className="text-2xl font-bold text-gray-900">
-              Chưa có pin
+              No Battery
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-100">
             <div className="flex-1">
               <div className="text-sm font-bold text-blue-700 uppercase">
-                Cần đặt lịch đổi pin
+                Schedule Battery Swap
               </div>
               <div className="text-xs text-blue-600 mt-1">
-                Xe của bạn chưa có pin. Hãy đặt lịch đổi pin đầu tiên.
+                Your vehicle doesn't have a battery yet. Please schedule your first battery swap.
               </div>
             </div>
             <button
               onClick={onFindStation}
               className="px-4 py-2 bg-white border border-blue-700 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
             >
-              Đặt lịch
+              Schedule
             </button>
           </div>
         </div>

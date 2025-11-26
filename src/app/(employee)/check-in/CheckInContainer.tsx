@@ -78,7 +78,7 @@ export default function CheckInContainer() {
         // No bookingId - redirect to reservations
         showToast({
           type: 'error',
-          message: 'Không tìm thấy booking ID. Vui lòng chọn booking từ trang đặt chỗ.',
+          message: 'Booking ID not found. Please select a booking from the reservations page.',
         });
         router.push('/reservations');
         return;

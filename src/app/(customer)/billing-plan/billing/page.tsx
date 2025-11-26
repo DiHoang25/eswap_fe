@@ -14,7 +14,7 @@ const BillingPage = () => {
           {/* Nội dung tab Billing */}
           <h2 className="text-xl text-gray-800 font-semibold mb-4">Billing</h2>
           <p className="text-gray-600">
-            Nội dung tab Billing sẽ được thêm sau.
+            Billing tab content will be added later.
           </p>
         </TabsNav>
       </div>

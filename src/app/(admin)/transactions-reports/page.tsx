@@ -58,8 +58,15 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
 
   // Load battery types
   useEffect(() => {
+    console.log("[Subscription Plans] Current batteryTypes:", batteryTypes.length);
     if (batteryTypes.length === 0) {
+      console.log("[Subscription Plans] Fetching battery types...");
       dispatch(fetchAllBatteryTypes());
+    } else {
+      console.log("[Subscription Plans] Battery types loaded:", batteryTypes.map(bt => ({
+        id: bt.batteryTypeID,
+        model: bt.batteryTypeModel
+      })));
     }
   }, [dispatch, batteryTypes.length]);
 
@@ -70,6 +77,16 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
       const data = await subscriptionPlanRepository.getAll();
       console.log("[Subscription Plans] Loaded plans from API:", data.length);
       console.log("[Subscription Plans] Plan names:", data.map(p => p.name));
+      // Log all keys of first plan to see what backend returns
+      if (data.length > 0) {
+        console.log("[Subscription Plans] First plan ALL KEYS:", Object.keys(data[0]));
+        console.log("[Subscription Plans] First plan FULL DATA:", data[0]);
+      }
+      console.log("[Subscription Plans] Sample plan batteryTypeIDs:", data.slice(0, 3).map(p => ({
+        name: p.name,
+        batteryTypeID: p.batteryTypeID,
+        batteryModel: p.batteryModel
+      })));
       
       // Log filtered plans count
       const currentFilter = batteryTypeFilter;
@@ -116,10 +133,27 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
   }, []);
 
   // Helper functions
-  const getBatteryTypeModel = (batteryTypeID?: string): string => {
-    if (!batteryTypeID) return "Unknown";
-    const batteryType = batteryTypes.find((bt) => bt.batteryTypeID === batteryTypeID);
-    return batteryType?.batteryTypeModel || "Unknown";
+  const getBatteryTypeDisplay = (plan: SubscriptionPlanDTO): string => {
+    // Priority 1: Use batteryModel directly if available
+    if (plan.batteryModel) {
+      return plan.batteryModel;
+    }
+    
+    // Priority 2: Use batteryTypeID to lookup
+    if (plan.batteryTypeID) {
+      const batteryType = batteryTypes.find((bt) => bt.batteryTypeID === plan.batteryTypeID);
+      if (batteryType) {
+        return batteryType.batteryTypeModel;
+      }
+    }
+    
+    // Priority 3: Infer from plan name
+    const nameLower = plan.name.toLowerCase();
+    if (nameLower.includes("xe máy") || nameLower.includes("motorcycle")) return "Small Battery";
+    if (nameLower.includes("ô tô nhỏ") || nameLower.includes("small car")) return "Medium Battery";
+    if (nameLower.includes("suv") || nameLower.includes("ô tô điện")) return "Large Battery";
+    
+    return "Unknown";
   };
 
   const getBatteryTypeFromModel = (batteryModel: string): "Small" | "Medium" | "Large" => {
@@ -146,9 +180,10 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
 
   const getVehicleType = (planName: string): string => {
     const nameLower = planName.toLowerCase();
-    if (nameLower.includes("xe máy")) return "Electric Motorcycle";
-    if (nameLower.includes("ô tô nhỏ")) return "Small Electric Car";
-    if (nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv")) return "Electric SUV/Large Car";
+    // Support both Vietnamese (for backward compatibility) and English keywords
+    if (nameLower.includes("xe máy") || nameLower.includes("motorcycle")) return "Electric Motorcycle";
+    if (nameLower.includes("ô tô nhỏ") || nameLower.includes("small car")) return "Small Electric Car";
+    if (nameLower.includes("ô tô suv") || nameLower.includes("ô tô điện suv") || nameLower.includes("suv car") || nameLower.includes("electric suv")) return "Electric SUV/Large Car";
     return "Electric Vehicle";
   };
 
@@ -396,10 +431,10 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-semibold mb-2">Subscription Plans Management</h2>
-            <p className="text-gray-600">
+        <p className="text-gray-600">
               Manage subscription plans for battery swap services
-            </p>
-          </div>
+        </p>
+      </div>
           <div className="flex gap-3 items-center">
             <select
               value={batteryTypeFilter}
@@ -455,7 +490,7 @@ export default withAdminAuth(function SubscriptionPlansManagement() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell>{getBatteryTypeModel(plan.batteryTypeID)}</TableCell>
+                <TableCell>{getBatteryTypeDisplay(plan)}</TableCell>
                 <TableCell>
                   <Chip size="sm" variant="flat" color="primary">
                     {plan.planGroup}

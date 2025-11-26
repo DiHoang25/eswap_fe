@@ -116,8 +116,8 @@ const getPageInfo = (pathname: string) => {
       };
     case "/transactions-reports":
       return {
-        title: "Transactions & Reports",
-        subtitle: "View transaction history and generate reports.",
+        title: "Subscription Plans",
+        subtitle: "Manage subscription plans and pricing for customers.",
       };
     case "/system-config":
       return {
