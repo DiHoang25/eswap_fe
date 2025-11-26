@@ -13,6 +13,11 @@ export interface BatteryDTO {
   percentage: number;
   currentSlotID?: string;
   currentVehicleID?: string;
+  // API fields (PascalCase from backend)
+  currentLocationStatus?: string; // Maps to position/location
+  batteryStatus?: string; // Maps to status
+  currentPercentage?: number; // Maps to percentage
+  createdAt?: string; // Creation date
 }
 
 /**

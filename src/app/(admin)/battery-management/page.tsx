@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { FaSearch, FaSyncAlt } from "react-icons/fa";
+import { FaSearch, FaSyncAlt, FaPlus } from "react-icons/fa";
 import {
   Table,
   TableHeader,
@@ -17,6 +17,8 @@ import { BatteryDTO } from "@/domain/dto/Duy/BatteryDTO";
 import { getBatteryTypeFromId } from "@/domain/entities/Battery";
 import { Select, SelectOption } from "@/presentation/components/ui/Select";
 import { Input } from "@/presentation/components/ui/Input";
+import CreateBatteryModal, { CreateBatteryData } from "./CreateBatteryModal";
+import { batteryRepositoryAPI } from "@/infrastructure/repositories/BatteryRepositoryAPI.impl";
 
 type StatusFilterOption = "all" | "available" | "faulty" | "null";
 type TypeFilterOption = "all" | "Large" | "Medium" | "Small";
@@ -36,6 +38,35 @@ export default function BatteryManagement() {
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(8);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [stations, setStations] = useState<Array<{ stationID: string; stationName: string }>>([]);
+
+  // Fetch stations on mount
+  useEffect(() => {
+    const fetchStations = async () => {
+      try {
+        // Get token from localStorage
+        const token = localStorage.getItem("accessToken");
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        const response = await fetch("/api/stations", { headers });
+        const result = await response.json();
+        
+        if (result.success && Array.isArray(result.data)) {
+          setStations(result.data);
+        }
+      } catch (error) {
+        console.error("Error fetching stations:", error);
+      }
+    };
+
+    fetchStations();
+  }, []);
 
   // Calculate rows per page based on container height
   useEffect(() => {
@@ -91,6 +122,18 @@ export default function BatteryManagement() {
     );
     setPage(1);
   }, [dispatch, typeFilter]);
+
+  // Handle create battery
+  const handleCreateBattery = async (data: CreateBatteryData) => {
+    try {
+      await batteryRepositoryAPI.create(data);
+      // Refresh battery list after creation
+      handleRefresh();
+    } catch (error) {
+      console.error("Error creating batteries:", error);
+      throw error;
+    }
+  };
 
   // Check if using cached data
   const isCacheValid = useMemo(() => {
@@ -206,64 +249,79 @@ export default function BatteryManagement() {
             <p className="font-medium text-gray-900">{battery.batteryID}</p>
           );
         case "type":
-          const batteryType = getBatteryTypeFromId(battery.batteryTypeID);
-          return <span className="text-sm text-gray-900">{batteryType}</span>;
+          // Get battery type from first 3 characters of batteryID
+          const batteryTypePrefix = battery.batteryID?.substring(0, 3).toUpperCase();
+          let batteryTypeName = "Unknown";
+          if (batteryTypePrefix === "LAR") batteryTypeName = "Large";
+          else if (batteryTypePrefix === "MED") batteryTypeName = "Medium";
+          else if (batteryTypePrefix === "SMA") batteryTypeName = "Small";
+          return <span className="text-sm text-gray-900">{batteryTypeName}</span>;
         case "status":
+          // API returns BatteryStatus field
+          const status = battery.batteryStatus || battery.status;
           return (
             <Chip
               size="sm"
               variant="flat"
-              color={getStatusColor(battery.status)}
+              color={getStatusColor(status)}
             >
-              {getStatusLabel(battery.status)}
+              {getStatusLabel(status)}
             </Chip>
           );
         case "health":
+          // API returns SoH field
+          const soH = battery.soH || 0;
           return (
             <div className="flex items-center gap-2">
               <div className="w-24 bg-gray-200 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
-                    battery.soH >= 80
+                    soH >= 80
                       ? "bg-green-500"
-                      : battery.soH >= 50
+                      : soH >= 50
                       ? "bg-yellow-500"
                       : "bg-red-500"
                   }`}
-                  style={{ width: `${battery.soH}%` }}
+                  style={{ width: `${soH}%` }}
                 />
               </div>
               <Chip
                 size="sm"
                 variant="flat"
-                color={getHealthColor(battery.soH)}
+                color={getHealthColor(soH)}
               >
-                {battery.soH}%
+                {soH}%
               </Chip>
             </div>
           );
         case "charge":
+          // API returns CurrentPercentage field
+          const currentPercentage = battery.currentPercentage || battery.percentage || 0;
           return (
             <div className="flex items-center gap-2">
               <div className="w-24 bg-gray-200 rounded-full h-2">
                 <div
                   className="h-2 rounded-full bg-blue-500 transition-all"
-                  style={{ width: `${battery.percentage}%` }}
+                  style={{ width: `${currentPercentage}%` }}
                 />
               </div>
               <span className="text-sm font-medium text-gray-900">
-                {battery.percentage}%
+                {currentPercentage}%
               </span>
             </div>
           );
         case "location":
+          // API returns CurrentLocationStatus field
+          const location = battery.currentLocationStatus || battery.position || "Unknown";
           return (
-            <span className="text-sm text-gray-600">{battery.position}</span>
+            <span className="text-sm text-gray-600">{location}</span>
           );
         case "createdAt":
+          // API returns CreatedAt field
+          const createdAt = battery.createdAt || new Date().toISOString();
           return (
             <span className="text-sm text-gray-600">
-              {formatDate(new Date().toISOString())}
+              {formatDate(createdAt)}
             </span>
           );
         default:
@@ -305,7 +363,7 @@ export default function BatteryManagement() {
           />
         </div>
 
-        {/* Results count and refresh button */}
+        {/* Results count and action buttons */}
         <div className="flex items-center justify-between text-sm text-gray-600">
           <div>
             Showing {filteredBatteries.length} of {batteries.length} batteries
@@ -320,19 +378,29 @@ export default function BatteryManagement() {
               </span>
             )}
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className={`flex items-center gap-2 px-3 py-1 rounded-md transition-colors ${
-              loading
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-            title="Refresh battery list"
-          >
-            <FaSyncAlt className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+              title="Create new batteries"
+            >
+              <FaPlus />
+              Create Battery
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className={`flex items-center gap-2 px-3 py-1 rounded-md transition-colors ${
+                loading
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              title="Refresh battery list"
+            >
+              <FaSyncAlt className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -440,6 +508,14 @@ export default function BatteryManagement() {
           </div>
         )}
       </div>
+
+      {/* Create Battery Modal */}
+      <CreateBatteryModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateBattery}
+        stations={stations}
+      />
     </div>
   );
 }

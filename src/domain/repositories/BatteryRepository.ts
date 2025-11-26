@@ -12,6 +12,20 @@ export interface GetBatteriesParams {
   vehicleId?: string;
 }
 
+export interface CreateBatteryParams {
+  lastStationID: string;
+  batteryTypeName: string;
+  quantity: number;
+  initialSoH: number;
+  initialPercentage: number;
+}
+
+export interface CreateBatteryResponse {
+  success: boolean;
+  message?: string;
+  data?: any;
+}
+
 export interface IBatteryRepository {
   /**
    * Lấy danh sách pin với phân trang và filters
@@ -22,6 +36,11 @@ export interface IBatteryRepository {
    * Update thông tin pin (percentage hoặc slot)
    */
   update(params: UpdateBatteryParams): Promise<UpdateBatteryResponse>;
+
+  /**
+   * Tạo pin mới
+   */
+  create(params: CreateBatteryParams): Promise<CreateBatteryResponse>;
 
   // Có thể thêm các phương thức khác sau này:
   // getById(batteryId: string): Promise<Battery | null>;
