@@ -12,37 +12,36 @@ import { Vehicle } from "@/domain/entities/Vehicle";
  * @returns Promise<Vehicle> - Xe đã được chọn
  * @throws Error nếu vehicle không hợp lệ
  */
-export async function selectVehicleUseCase(
+export function selectVehicleUseCase(
   vehicle: Vehicle | null
-): Promise<Vehicle | null> {
+): Vehicle | null {
   // Validate input
   if (!vehicle) {
-    console.log("[UseCase] Clearing vehicle selection");
     // Clear selection from localStorage nếu cần
     if (typeof window !== "undefined") {
       localStorage.removeItem("selectedVehicleId");
+      console.log('[SelectVehicle] Cleared vehicle selection');
     }
     return null;
   }
 
   // Validate vehicle object
   if (!vehicle.vehicleID) {
+    console.error('[SelectVehicle] Invalid vehicle: missing vehicleID', vehicle);
     throw new Error("Invalid vehicle: missing vehicleID");
   }
 
   try {
     // Lưu selection vào localStorage để persist khi reload
+    // Backend sẽ nhận vehicleID từ selectedVehicle trong Redux store
     if (typeof window !== "undefined") {
       localStorage.setItem("selectedVehicleId", vehicle.vehicleID);
+      console.log('[SelectVehicle] Saved vehicle selection:', vehicle.vehicleID, vehicle.vehicleName);
     }
-
-    console.log(
-      `[UseCase] Selected vehicle: ${vehicle.vehicleName} (${vehicle.vehicleID})`
-    );
 
     return vehicle;
   } catch (error) {
-    console.error("[UseCase] Failed to select vehicle:", error);
+    console.error('[SelectVehicle] Error saving vehicle selection:', error);
     throw error;
   }
 }

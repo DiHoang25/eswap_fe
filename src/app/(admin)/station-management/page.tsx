@@ -90,7 +90,8 @@ export default function StationManagement() {
     if (!isCacheValid || stations.length === 0) {
       dispatch(fetchAllStations());
     }
-  }, [dispatch, lastFetched, stations.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, lastFetched]); // Removed stations.length to prevent infinite loop
 
   // Handle row click to navigate to station detail
   const handleRowClick = useCallback(
@@ -530,4 +531,4 @@ export default function StationManagement() {
       </Modal>
     </div>
   );
-});
+};

@@ -1,12 +1,23 @@
 "use client";
 
 import { withCustomerAuth } from '@/hoc/withAuth';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
 import { fetchAllVehicles } from "@/application/services/vehicleService";
 import { getBatteryTypeFromId } from "@/domain/entities/Battery";
-import { FiCheck } from "react-icons/fi";
+import { FiCheck, FiRefreshCw } from "react-icons/fi";
+
+// Payment history interface
+interface PaymentHistory {
+  paymentID: string;
+  userName: string;
+  email: string;
+  planName: string;
+  method: string;
+  amount: number;
+  paidAt: string;
+}
 
 // Plan types from API
 interface ApiPlan {
@@ -18,6 +29,7 @@ interface ApiPlan {
   description: string;
   durationDays: number;
   maxSwapsPerPeriod: number | null;
+  batteryModel?: string;
 }
 
 // Plan types and data structures
@@ -40,9 +52,9 @@ interface VehicleTypePlans {
 
 // Map battery type to vehicle type
 const batteryTypeToVehicleType: Record<string, string> = {
-  Small: "Xe máy điện",
-  Medium: "Ô tô điện cỡ nhỏ",
-  Large: "Ô tô điện SUV/cỡ lớn",
+  Small: "Electric Motorcycle",
+  Medium: "Small Electric Car",
+  Large: "Electric SUV/Large Car",
 };
 
 export default function BillingPlanPage() {
@@ -65,47 +77,176 @@ export default function BillingPlanPage() {
   const [paymentError, setPaymentError] = useState("");
   const [apiPlans, setApiPlans] = useState<ApiPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(10);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyTotalItems, setHistoryTotalItems] = useState(0);
+  const modalOverlayRef = useRef<HTMLDivElement>(null);
 
   // Fetch subscription plans from API
+  const fetchPlans = async (showLoading = true) => {
+    try {
+      if (showLoading) {
+        setPlansLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      
+      // Get token from localStorage or cookies
+      let token = localStorage.getItem("accessToken");
+      
+      // Fallback to cookies if localStorage is empty
+      if (!token) {
+        const cookies = document.cookie.split(';');
+        const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
+        if (tokenCookie) {
+          token = tokenCookie.split('=')[1];
+          // Restore to localStorage for future use
+          localStorage.setItem("accessToken", token);
+        }
+      }
+      
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      
+      // Add cache-busting query parameter to ensure fresh data
+      const cacheBuster = `?t=${Date.now()}`;
+      const response = await fetch(`/api/subscription-plans${cacheBuster}`, { headers });
+      const result = await response.json();
+      
+      if (result.success && Array.isArray(result.data)) {
+        console.log("[BillingPlan] Fetched plans:", result.data.length);
+        console.log("[BillingPlan] Plan names from API:", result.data.map((p: ApiPlan) => p.name));
+        setApiPlans(result.data);
+      } else {
+        console.warn("[BillingPlan] Invalid response format:", result);
+      }
+    } catch (err) {
+      console.error("Error fetching plans:", err);
+    } finally {
+      setPlansLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Initial fetch on mount
   useEffect(() => {
-    const fetchPlans = async () => {
+    fetchPlans(true);
+  }, []);
+
+  // Manage body scroll when modal opens/closes
+  useEffect(() => {
+    if (showPaymentModal) {
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Restore body scroll when modal is closed
+      document.body.style.overflow = '';
+      // Let React handle the removal - don't force remove elements
+    }
+    
+    // Cleanup: ensure body scroll is restored on unmount
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showPaymentModal]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showPaymentModal) {
+        setShowPaymentModal(false);
+        setPaymentError("");
+      }
+    };
+    
+    if (showPaymentModal) {
+      document.addEventListener('keydown', handleEsc);
+      return () => {
+        document.removeEventListener('keydown', handleEsc);
+      };
+    }
+  }, [showPaymentModal]);
+
+  // Auto-refresh when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("[BillingPlan] Page became visible, refreshing plans...");
+        fetchPlans(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Auto-refresh every 10 seconds when page is visible (reduced for faster updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && !plansLoading && !refreshing) {
+        console.log("[BillingPlan] Auto-refreshing plans...");
+        fetchPlans(false);
+      }
+    }, 10000); // 10 seconds - reduced for faster updates
+
+    return () => clearInterval(interval);
+  }, [plansLoading, refreshing]);
+  // Fetch payment history
+  useEffect(() => {
+    const fetchPaymentHistory = async () => {
       try {
-        // Get token from localStorage or cookies
         let token = localStorage.getItem("accessToken");
         
-        // Fallback to cookies if localStorage is empty
         if (!token) {
           const cookies = document.cookie.split(';');
           const tokenCookie = cookies.find(c => c.trim().startsWith('accessToken='));
           if (tokenCookie) {
             token = tokenCookie.split('=')[1];
-            // Restore to localStorage for future use
-            localStorage.setItem("accessToken", token);
           }
         }
         
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
+        if (!token) {
+          console.log("[Payment History] No token found");
+          return;
         }
         
-        const response = await fetch("/api/subscription-plans", { headers });
+        const response = await fetch(`/api/user/payments?pageNumber=${historyPage}&pageSize=${historyPageSize}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        
         const result = await response.json();
         
         if (result.success && Array.isArray(result.data)) {
-          setApiPlans(result.data);
+          setPaymentHistory(result.data);
+          if (result.pagination) {
+            setHistoryTotalPages(result.pagination.totalPages);
+            setHistoryTotalItems(result.pagination.totalItems);
+          }
         }
       } catch (err) {
-        console.error("Error fetching plans:", err);
+        console.error("Error fetching payment history:", err);
       } finally {
-        setPlansLoading(false);
+        setHistoryLoading(false);
       }
     };
 
-    fetchPlans();
-  }, []);
+    if (isAuthenticated && user) {
+      fetchPaymentHistory();
+    }
+  }, [isAuthenticated, user, historyPage, historyPageSize]);
 
   // Fetch vehicles from Redux if not already loaded
   useEffect(() => {
@@ -120,19 +261,45 @@ export default function BillingPlanPage() {
       return;
     }
 
-    // Group plans by vehicle type based on plan name
-    const getVehicleType = (planName: string): string => {
-      if (planName.includes("xe máy")) return "Xe máy điện";
-      if (planName.includes("ô tô nhỏ")) return "Ô tô điện cỡ nhỏ";
-      if (planName.includes("ô tô SUV") || planName.includes("ô tô điện suv")) return "Ô tô điện SUV/cỡ lớn";
-      return "Xe điện";
+    // Helper: Get vehicle type from batteryModel
+    const getVehicleTypeFromBatteryModel = (batteryModel?: string): string => {
+      if (!batteryModel) return "Electric Vehicle";
+      const modelLower = batteryModel.toLowerCase();
+      // Map batteryModel to vehicle type
+      if (modelLower.includes("small")) return "Electric Motorcycle";
+      if (modelLower.includes("medium")) return "Small Electric Car";
+      if (modelLower.includes("large")) return "Electric SUV/Large Car";
+      return "Electric Vehicle";
+    };
+
+    // Helper: Get battery type from vehicle category
+    const getBatteryTypeFromCategory = (category: string): "Small" | "Medium" | "Large" => {
+      const categoryLower = category.toLowerCase();
+      if (categoryLower.includes("motorcycle") || categoryLower.includes("electricmotorbike")) {
+        return "Small";
+      }
+      if (categoryLower.includes("suv") || categoryLower.includes("electricsuv")) {
+        return "Large";
+      }
+      // SmallElectricCar or default
+      return "Medium";
+    };
+
+    // Helper: Get sort order for batteryModel
+    const getBatteryModelSortOrder = (batteryModel?: string): number => {
+      if (!batteryModel) return 99;
+      const modelLower = batteryModel.toLowerCase();
+      if (modelLower.includes("small")) return 1;
+      if (modelLower.includes("medium")) return 2;
+      if (modelLower.includes("large")) return 3;
+      return 99;
     };
 
     // Convert API plan to PlanDetail
     const convertPlan = (apiPlan: ApiPlan): PlanDetail => {
       const swapLimit = apiPlan.maxSwapsPerPeriod 
-        ? `≤${apiPlan.maxSwapsPerPeriod} lần`
-        : "Không giới hạn";
+        ? `≤${apiPlan.maxSwapsPerPeriod} times`
+        : "Unlimited";
 
       return {
         planID: apiPlan.planID,
@@ -145,23 +312,63 @@ export default function BillingPlanPage() {
       };
     };
 
-    // Determine vehicle type
-    let targetVehicleType = "Xe máy điện"; // default
-    let batteryType = "Small"; // default
+    // Determine vehicle type and battery type from selected vehicle
+    let targetVehicleType = "Electric Motorcycle"; // default
+    let targetBatteryType = "Small"; // default
     
     const vehicle = selectedVehicle || vehicles[0];
     if (vehicle) {
-      batteryType = getBatteryTypeFromId(vehicle.batteryTypeID);
-      console.log(`[BillingPlan] Vehicle: ${vehicle.vehicleName}, batteryTypeID: ${vehicle.batteryTypeID}, batteryType: ${batteryType}`);
-      targetVehicleType = batteryTypeToVehicleType[batteryType] || "Xe máy điện";
+      // Get battery type from vehicle category (more reliable than batteryTypeID)
+      targetBatteryType = getBatteryTypeFromCategory(vehicle.category);
+      targetVehicleType = batteryTypeToVehicleType[targetBatteryType] || "Electric Motorcycle";
+      
+      console.log(`[BillingPlan] Selected Vehicle:`, {
+        name: vehicle.vehicleName,
+        category: vehicle.category,
+        batteryTypeID: vehicle.batteryTypeID,
+        determinedBatteryType: targetBatteryType,
+        targetVehicleType: targetVehicleType,
+      });
     }
 
-    // Filter and convert plans for this vehicle type
+    console.log(`[BillingPlan] Total plans from API: ${apiPlans.length}`);
+    console.log(`[BillingPlan] Plans with batteryModel:`, apiPlans.map(p => ({ name: p.name, batteryModel: p.batteryModel })));
+
+    // Filter plans: match by batteryModel from API
     const filteredPlans = apiPlans
-      .filter(p => getVehicleType(p.name.toLowerCase()) === targetVehicleType)
-      .map(convertPlan);
+      .filter(p => {
+        const planVehicleType = getVehicleTypeFromBatteryModel(p.batteryModel);
+        const matches = planVehicleType === targetVehicleType;
+        
+        console.log(`[BillingPlan] Plan "${p.name}":`, {
+          batteryModel: p.batteryModel,
+          planVehicleType,
+          targetVehicleType,
+          matches,
+        });
+        
+        return matches;
+      })
+      .map(convertPlan)
+      .sort((a, b) => {
+        // Sort by batteryModel order first (Small -> Medium -> Large)
+        const planA = apiPlans.find(p => p.planID === a.planID);
+        const planB = apiPlans.find(p => p.planID === b.planID);
+        const orderA = getBatteryModelSortOrder(planA?.batteryModel);
+        const orderB = getBatteryModelSortOrder(planB?.batteryModel);
+        
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        
+        // If same batteryModel, sort by price
+        const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
+        const priceB = parseInt(b.price.replace(/[^\d]/g, ''));
+        return priceA - priceB;
+      });
     
-    console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${batteryType})`);
+    console.log(`[BillingPlan] Filtered ${filteredPlans.length} plans for ${targetVehicleType} (Battery: ${targetBatteryType})`);
+    console.log(`[BillingPlan] Filtered plan names:`, filteredPlans.map(p => p.type));
 
     if (filteredPlans.length > 0) {
       setSelectedPlanType({
@@ -170,15 +377,22 @@ export default function BillingPlanPage() {
         plans: filteredPlans,
       });
     } else {
-      // Fallback: show all motorcycle plans if no match
-      const motorPlans = apiPlans
-        .filter(p => p.name.toLowerCase().includes("xe máy"))
-        .map(convertPlan);
+      // Fallback: show all plans if no match (user can see all options)
+      console.log(`[BillingPlan] No plans matched for ${targetVehicleType}, showing all plans`);
+      const allPlans = apiPlans
+        .map(convertPlan)
+        .sort((a, b) => {
+          const priceA = parseInt(a.price.replace(/[^\d]/g, ''));
+          const priceB = parseInt(b.price.replace(/[^\d]/g, ''));
+          return priceA - priceB;
+        });
+      
+      console.log(`[BillingPlan] Showing ${allPlans.length} plans as fallback`);
       
       setSelectedPlanType({
-        vehicleType: "Xe máy điện",
-        capacity: "2 kWh",
-        plans: motorPlans,
+        vehicleType: "All Vehicle Types",
+        capacity: "",
+        plans: allPlans,
       });
     }
 
@@ -189,17 +403,18 @@ export default function BillingPlanPage() {
     setSelectedPlan(plan);
     setShowPaymentModal(true);
     setPaymentError("");
+    // Body scroll will be managed by useEffect
   };
 
   const handlePayment = async () => {
     const vehicle = selectedVehicle || vehicles[0];
     if (!vehicle) {
-      setPaymentError("Vui lòng chọn xe trước");
+      setPaymentError("Please select a vehicle first");
       return;
     }
 
     if (!selectedPlan) {
-      setPaymentError("Vui lòng chọn gói");
+      setPaymentError("Please select a plan");
       return;
     }
 
@@ -209,7 +424,7 @@ export default function BillingPlanPage() {
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
-        setPaymentError("Vui lòng đăng nhập");
+        setPaymentError("Please login");
         return;
       }
 
@@ -232,11 +447,42 @@ export default function BillingPlanPage() {
         console.log('[Payment] Redirecting to:', result.data.checkoutUrl);
         window.location.href = result.data.checkoutUrl;
       } else {
-        setPaymentError(result.message || "Thanh toán thất bại");
+        // Extract and format error message from backend
+        let errorMessage = result.message || "Payment failed";
+        
+        // Check for specific error messages from backend
+        if (errorMessage.toLowerCase().includes("already has an active subscription")) {
+          // User already has active subscription - redirect to bookings page
+          console.log('[Payment] User already has active subscription, redirecting to bookings');
+          window.location.href = "/booking";
+          return;
+        } else if (errorMessage.toLowerCase().includes("no booking found")) {
+          errorMessage = "⚠️ You need to book a battery swap before purchasing a subscription plan. Please make a booking at 'Find Station'.";
+        } else if (errorMessage.toLowerCase().includes("booking") && errorMessage.toLowerCase().includes("vehicle")) {
+          errorMessage = `⚠️ No booking found for this vehicle. Please book a battery swap first.`;
+        }
+        
+        setPaymentError(errorMessage);
       }
     } catch (err) {
       console.error("Payment error:", err);
-      setPaymentError("Lỗi kết nối. Vui lòng thử lại");
+      
+      // Handle network or parsing errors
+      let errorMessage = "Connection error. Please try again";
+      
+      if (err instanceof Error) {
+        // Check if error message contains backend error
+        if (err.message.toLowerCase().includes("already has an active subscription")) {
+          // User already has active subscription - redirect to bookings page
+          console.log('[Payment] User already has active subscription, redirecting to bookings');
+          window.location.href = "/booking";
+          return;
+        } else if (err.message.toLowerCase().includes("no booking found")) {
+          errorMessage = "⚠️ You need to book a battery swap before purchasing a subscription plan. Please make a booking at 'Find Station'.";
+        }
+      }
+      
+      setPaymentError(errorMessage);
     } finally {
       setPaymentLoading(false);
     }
@@ -247,7 +493,7 @@ export default function BillingPlanPage() {
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải thông tin...</p>
+          <p className="mt-4 text-gray-600">Loading information...</p>
         </div>
       </div>
     );
@@ -257,7 +503,7 @@ export default function BillingPlanPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
-          <p className="text-gray-600">Không tìm thấy gói cước phù hợp</p>
+          <p className="text-gray-600">No suitable plans found</p>
         </div>
       </div>
     );
@@ -268,13 +514,21 @@ export default function BillingPlanPage() {
       <div className="w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-6 relative">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Gói Thuê Pin Điện
+              Battery Subscription Plans
             </h1>
             <p className="text-base text-gray-600">
-              Chọn gói phù hợp với nhu cầu của bạn
+              Choose a plan that fits your needs
             </p>
+            <button
+              onClick={() => fetchPlans(false)}
+              disabled={refreshing || plansLoading}
+              className="absolute top-0 right-0 p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh plans"
+            >
+              <FiRefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
+            </button>
           </div>
 
           {/* Horizontal Scrollable Plan Cards */}
@@ -344,7 +598,7 @@ export default function BillingPlanPage() {
                           <FiCheck className="w-4 h-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                           <div>
                             <p className="font-medium text-gray-900">
-                              Số lần đổi pin
+                              Battery Swaps
                             </p>
                             <p className="text-gray-600 text-xs">
                               {plan.swapLimit}
@@ -363,12 +617,12 @@ export default function BillingPlanPage() {
                       <div className="flex items-start text-sm">
                         <FiCheck className="w-4 h-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                         <p className="text-gray-600">
-                          Pin {selectedPlanType.capacity}
+                          Battery {selectedPlanType.capacity}
                         </p>
                       </div>
                       <div className="flex items-start text-sm">
                         <FiCheck className="w-4 h-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <p className="text-gray-600">Hỗ trợ 24/7</p>
+                        <p className="text-gray-600">24/7 Support</p>
                       </div>
                     </div>
 
@@ -380,54 +634,240 @@ export default function BillingPlanPage() {
                       }}
                       className="w-full bg-linear-to-r from-indigo-600 to-indigo-800 text-white font-semibold py-2.5 px-4 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all group-hover:scale-105 text-sm"
                     >
-                      Chọn Gói Này
+                      Choose This Plan
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Payment History Section */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Payment History</h2>
+            
+            {historyLoading ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <p className="mt-2 text-gray-600">Loading payment history...</p>
+              </div>
+            ) : paymentHistory.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <p className="text-gray-600">No payment history found</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Payment ID
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Plan Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Method
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Amount
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Paid At
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {paymentHistory.map((payment) => (
+                        <tr key={payment.paymentID} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm font-medium text-gray-900 font-mono">
+                              {payment.paymentID.substring(0, 8)}...
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-medium text-gray-900">
+                              {payment.planName}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {payment.method}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm font-bold text-indigo-600">
+                              {payment.amount.toLocaleString("vi-VN")} ₫
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <p className="text-sm text-gray-600">
+                              {new Date(payment.paidAt).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                                timeZone: "UTC",
+                              })}
+                            </p>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination Controls */}
+                {historyTotalPages > 1 && (
+                  <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing page {historyPage} of {historyTotalPages} ({historyTotalItems} total payments)
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                        disabled={historyPage === 1}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, historyTotalPages) }, (_, i) => {
+                          let pageNum;
+                          if (historyTotalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (historyPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (historyPage >= historyTotalPages - 2) {
+                            pageNum = historyTotalPages - 4 + i;
+                          } else {
+                            pageNum = historyPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setHistoryPage(pageNum)}
+                              className={`w-10 h-10 text-sm font-medium rounded-lg transition-colors ${
+                                historyPage === pageNum
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => setHistoryPage(p => Math.min(historyTotalPages, p + 1))}
+                        disabled={historyPage === historyTotalPages}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedPlan && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      {showPaymentModal && selectedPlan ? (
+        <div 
+          ref={modalOverlayRef}
+          key="payment-modal-overlay"
+          data-modal-active="true"
+          className="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowPaymentModal(false);
+            setPaymentError("");
+            setSelectedPlan(null);
+            // Body scroll will be restored by useEffect
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Xác nhận thanh toán
+              Confirm Payment
             </h2>
 
             <div className="space-y-4 mb-6">
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Gói đã chọn</p>
+                <p className="text-sm text-gray-600">Selected Plan</p>
                 <p className="font-semibold text-gray-900">{selectedPlan.type}</p>
                 <p className="text-sm text-gray-600 mt-1">{selectedPlan.description}</p>
               </div>
 
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Giá</p>
+                <p className="text-sm text-gray-600">Price</p>
                 <p className="text-2xl font-bold text-indigo-600">{selectedPlan.price}</p>
               </div>
 
               {selectedPlan.swapLimit && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-600">Giới hạn đổi pin</p>
+                  <p className="text-sm text-gray-600">Swap Limit</p>
                   <p className="font-semibold text-gray-900">{selectedPlan.swapLimit}</p>
                 </div>
               )}
 
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Xe sử dụng</p>
+                <p className="text-sm text-gray-600">Vehicle</p>
                 <p className="font-semibold text-gray-900">
-                  {(selectedVehicle || vehicles[0])?.vehicleName || "Chưa chọn xe"}
+                  {(selectedVehicle || vehicles[0])?.vehicleName || "No vehicle selected"}
                 </p>
               </div>
             </div>
 
             {paymentError && (
-              <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded">
-                <p className="text-sm text-red-700">{paymentError}</p>
+              <div className={`mb-4 p-4 rounded-lg border-l-4 ${
+                paymentError.includes("book") || paymentError.includes("no booking")
+                  ? "bg-amber-50 border-amber-500"
+                  : "bg-red-50 border-red-500"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {paymentError.includes("book") || paymentError.includes("no booking") ? (
+                      <svg className="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${
+                      paymentError.includes("book") || paymentError.includes("no booking")
+                        ? "text-amber-800"
+                        : "text-red-700"
+                    }`}>
+                      {paymentError}
+                    </p>
+                    {(paymentError.includes("book") || paymentError.includes("no booking")) && (
+                      <button
+                        onClick={() => {
+                          setShowPaymentModal(false);
+                          setPaymentError("");
+                          // Body scroll will be restored by useEffect
+                          window.location.href = "/findstation";
+                        }}
+                        className="mt-2 text-sm font-semibold text-amber-700 hover:text-amber-900 underline"
+                      >
+                        Go to Find Station →
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -436,11 +876,12 @@ export default function BillingPlanPage() {
                 onClick={() => {
                   setShowPaymentModal(false);
                   setPaymentError("");
+                  // Body scroll will be restored by useEffect
                 }}
                 disabled={paymentLoading}
                 className="flex-1 px-4 py-2.5 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-semibold disabled:opacity-50"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 onClick={handlePayment}
@@ -453,16 +894,16 @@ export default function BillingPlanPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                     </svg>
-                    Đang xử lý...
+                    Processing...
                   </>
                 ) : (
-                  "Xác nhận thanh toán"
+                  "Confirm Payment"
                 )}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

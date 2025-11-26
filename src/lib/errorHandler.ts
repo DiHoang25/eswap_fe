@@ -18,6 +18,7 @@ const suppressedErrors = [
   'Failed to fetch battery inventory',
   '[AuthRepository] Logout error', // Logout errors are expected (backend might not have /logout endpoint)
   '/auth/logout', // Suppress logout endpoint errors
+  'Battery not found for the specified vehicle', // Expected when vehicle has no battery
 ];
 
 // Override console.error
@@ -29,8 +30,13 @@ console.error = (...args: any[]) => {
     message.includes(pattern)
   );
   
-  // Also suppress "[API Error] Object" logs
+  // Also suppress "[API Error] Object" logs for 404 errors (expected when no data)
   if (message.includes('[API Error]') && message.includes('Object')) {
+    // Check if it's a 404 error (expected for missing data)
+    if (message.includes('404') || message.includes('status: 404')) {
+      return;
+    }
+    // For other errors, still suppress empty Object logs
     return;
   }
   

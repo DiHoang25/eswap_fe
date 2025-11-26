@@ -7,6 +7,7 @@ import {
   FaHistory,
   FaCreditCard,
   FaQuestionCircle,
+  FaCar,
 } from "react-icons/fa";
 import SideBar, {
   NavigationItem,
@@ -28,6 +29,11 @@ const navigationItems: NavigationItem[] = [
   },
   { name: "My Bookings", path: "/booking", icon: <FaCalendarAlt size={24} /> },
   { name: "Swap History", path: "/history", icon: <FaHistory size={24} /> },
+  {
+    name: "My Vehicles",
+    path: "/vehicles",
+    icon: <FaCar size={24} />,
+  },
   {
     name: "Billing & Plans",
     path: "/billing-plan",

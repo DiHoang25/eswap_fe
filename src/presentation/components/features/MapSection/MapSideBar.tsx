@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAppSelector, useAppDispatch } from "@/application/hooks/useRedux";
 import { setMapView } from "@/application/slices/mapSlice";
@@ -15,13 +15,27 @@ export default function MapSideBar() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { userLocation } = useAppSelector((state) => state.map);
-  const [selectedBatteryType, setSelectedBatteryType] =
-    useState<BatteryType>("Medium");
+  const { selectedVehicle } = useAppSelector((state) => state.vehicle);
   const [stations, setStations] = useState<SearchStationResponse[]>([]);
   const [allStations, setAllStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Get battery type from selected vehicle's category
+  const batteryType = useMemo((): BatteryType => {
+    if (!selectedVehicle) return "Medium"; // Default fallback
+    
+    const category = selectedVehicle.category.toLowerCase();
+    if (category.includes("motorcycle") || category.includes("electricmotorbike")) {
+      return "Small";
+    }
+    if (category.includes("suv") || category.includes("electricsuv")) {
+      return "Large";
+    }
+    // SmallElectricCar or default
+    return "Medium";
+  }, [selectedVehicle]);
 
   // Fetch all stations to get coordinates
   useEffect(() => {
@@ -94,7 +108,7 @@ export default function MapSideBar() {
           {
             latitude: userLocation.latitude,
             longitude: userLocation.longitude,
-            batteryType: selectedBatteryType,
+            batteryType: batteryType,
           }
         );
 
@@ -105,7 +119,7 @@ export default function MapSideBar() {
         const errorMessage =
           err instanceof Error
             ? err.message
-            : "Không thể tải danh sách trạm. Vui lòng thử lại.";
+            : "Unable to load station list. Please try again.";
         setError(errorMessage);
         setStations([]);
       } finally {
@@ -114,14 +128,28 @@ export default function MapSideBar() {
     };
 
     fetchNearbyStations();
-  }, [userLocation, selectedBatteryType]);
+  }, [userLocation, batteryType]);
+
+  // Show message if no vehicle selected
+  if (!selectedVehicle) {
+    return (
+      <div className="w-full h-full bg-white rounded-lg shadow-sm p-4 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-500 text-sm mb-2">No vehicle selected</p>
+          <p className="text-gray-400 text-xs">
+            Please select a vehicle from the home page first
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Show message if no user location
   if (!userLocation) {
     return (
       <div className="w-full h-full bg-white rounded-lg shadow-sm p-4 flex items-center justify-center">
         <p className="text-gray-500 text-sm">
-          Vui lòng bật vị trí để tìm trạm gần nhất
+          Please enable location to find nearby stations
         </p>
       </div>
     );
@@ -133,32 +161,19 @@ export default function MapSideBar() {
         <h2 className="text-lg font-semibold text-gray-900 mb-3">
           Stations Near You
         </h2>
-        {/* Battery type dropdown */}
-        <div>
-          <label
-            htmlFor="battery-type"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Battery Type
-          </label>
-          <select
-            id="battery-type"
-            value={selectedBatteryType}
-            onChange={(e) =>
-              setSelectedBatteryType(e.target.value as BatteryType)
-            }
-            className="w-full px-3 py-2 text-gray-800 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-          >
-            <option key="Small" value="Small">
-              Small
-            </option>
-            <option key="Medium" value="Medium">
-              Medium
-            </option>
-            <option key="Large" value="Large">
-              Large
-            </option>
-          </select>
+        {/* Selected Vehicle Info */}
+        <div className="mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-xs text-gray-600 mb-1">Selected Vehicle</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {selectedVehicle.vehicleName}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {selectedVehicle.category.replace(/([A-Z])/g, ' $1').trim()} • Battery: {batteryType}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -207,7 +222,7 @@ export default function MapSideBar() {
                       onClick={(e) => handleBookStation(e, station.stationName)}
                       className="mt-1 bg-indigo-600 text-white py-1 px-3 rounded text-xs font-medium hover:bg-indigo-700 transition-colors"
                     >
-                      Đặt lịch
+                      Book Now
                     </button>
                   </div>
                 </div>

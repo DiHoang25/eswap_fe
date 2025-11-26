@@ -102,7 +102,8 @@ export default withStaffAuth(function StaffDashboard() {
   const [q, setQ] = useState('');
   const [data, setData] = useState<any[]>(initialData);
   const [loading, setLoading] = useState(false);
-  const [swapTransactions, setSwapTransactions] = useState<any[]>([]);
+  const [swapTransactions, setSwapTransactions] = useState<any[]>([]); // For display (getByStation - có UserName, LicensePlate, BookingTime)
+  const [swapTransactionsForStatus, setSwapTransactionsForStatus] = useState<any[]>([]); // For status check (getAll - có BookingID)
   const [loadingSwaps, setLoadingSwaps] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [currentPageSwaps, setCurrentPageSwaps] = useState(1);
@@ -127,11 +128,109 @@ export default withStaffAuth(function StaffDashboard() {
       loadSwapTransactions();
     };
     
+    // Listen for bookings refresh events (triggered after swap completion)
+    const handleBookingsRefresh = async () => {
+      console.log('[Dashboard] 🔄 Refreshing bookings after swap completion...');
+      // Reload bookings data
+      if (user && isAuthenticated) {
+        try {
+          setLoading(true);
+          let stationID = user?.stationId;
+          const stationName = user?.stationName;
+          
+          // Resolve stationID if needed
+          if (!stationID || !/^[0-9a-f-]{36}$/i.test(stationID)) {
+            if (stationName) {
+              try {
+                const { getStationIdByName } = await import('@/application/services/Hoang/stationService');
+                const resolvedId = await getStationIdByName(stationName);
+                if (resolvedId) {
+                  stationID = resolvedId;
+                }
+              } catch (e) {
+                console.error('[Dashboard] Error resolving stationID:', e);
+              }
+            }
+          }
+          
+          const list = await bookingService.getAllBookingOfStation(stationID);
+          
+          const rows = (list || []).map((b: any) => {
+            const customerName = b.customerName || b.CustomerName || 
+                                 b.username || b.userName || b.UserName ||
+                                 b.fullName || b.FullName ||
+                                 b.customer || b.Customer ||
+                                 b.driver || b.Driver ||
+                                 b.user?.name || b.user?.fullName ||
+                                 b.Customer?.FullName || b.User?.FullName ||
+                                 '—';
+            
+            const bookingTimeStr = b.bookingTime || b.BookingTime || b.time || b.bookingHour || '';
+            let dateStr = '--';
+            let timeStr = '--';
+            let sortDate: Date | null = null;
+            
+            if (bookingTimeStr) {
+              try {
+                const dt = new Date(bookingTimeStr);
+                dateStr = dt.toLocaleDateString('vi-VN');
+                timeStr = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                sortDate = dt;
+              } catch (e) {
+                console.warn('[Dashboard] Failed to parse date:', bookingTimeStr);
+              }
+            }
+            
+            if (!sortDate) {
+              const createdAtStr = b.createdAt || b.CreatedAt || b.created_at;
+              const updatedAtStr = b.updatedAt || b.UpdatedAt || b.updated_at;
+              const fallbackDateStr = createdAtStr || updatedAtStr;
+              if (fallbackDateStr) {
+                try {
+                  sortDate = new Date(fallbackDateStr);
+                } catch (e) {
+                  console.warn('[Dashboard] Failed to parse createdAt/updatedAt:', fallbackDateStr);
+                }
+              }
+            }
+            
+            const backendStatus = b.Status || b.status || b.bookingStatus || 'Pending';
+            
+            return {
+              id: b.bookingID || b.id || b.BookingID || b.bookingId,
+              name: customerName,
+              date: dateStr,
+              time: timeStr,
+              status: backendStatus,
+              raw: b,
+              sortDate: sortDate || new Date(0),
+            };
+          });
+          
+          rows.sort((a, b) => {
+            const dateA = a.sortDate.getTime();
+            const dateB = b.sortDate.getTime();
+            return dateB - dateA;
+          });
+          
+          setData(rows);
+        } catch (e: any) {
+          console.error('[Dashboard] Error refreshing bookings:', e);
+        } finally {
+          setLoading(false);
+        }
+      }
+      // Also refresh swap transactions
+      loadSwapTransactions();
+    };
+    
     window.addEventListener('inventory-refresh', handleInventoryRefresh);
+    window.addEventListener('bookings-refresh', handleBookingsRefresh);
     return () => {
       window.removeEventListener('inventory-refresh', handleInventoryRefresh);
+      window.removeEventListener('bookings-refresh', handleBookingsRefresh);
     };
-  }, [refetch, refetchInventory]);
+  }, [refetch, refetchInventory, user, isAuthenticated]);
   
   // Load swap transactions history
   const loadSwapTransactions = async () => {
@@ -139,12 +238,20 @@ export default withStaffAuth(function StaffDashboard() {
     
     try {
       setLoadingSwaps(true);
-      const swaps = await swapTransactionRepository.getByStation(stationId);
-      console.log('[Dashboard] ✅ Loaded swap transactions:', swaps);
-      // Backend trả về SwapTransactionResponse với UserName, LicensePlate, BookingTime, Cost, SwapStatus
+      
+      // Load 2 loại data:
+      // 1. getByStation() - để hiển thị trong table (có UserName, LicensePlate, BookingTime)
+      // 2. getAll() - để check swap status (có BookingID)
+      const [swapsForDisplay, swapsForStatus] = await Promise.all([
+        swapTransactionRepository.getByStation(stationId), // SwapTransactionResponse với UserName, LicensePlate, BookingTime
+        swapTransactionRepository.getAll(), // SwapTransactionDTOs với BookingID, SwapStatus
+      ]);
+      
+      console.log('[Dashboard] ✅ Loaded swap transactions for display:', swapsForDisplay);
+      console.log('[Dashboard] ✅ Loaded swap transactions for status:', swapsForStatus);
       
       // Sort by booking time (newest first) - similar to bookings
-      const sortedSwaps = (swaps || []).sort((a: any, b: any) => {
+      const sortedSwaps = (swapsForDisplay || []).sort((a: any, b: any) => {
         const timeA = a.BookingTime || a.bookingTime || a.swapDate || a.CreatedAt || a.createdAt || '';
         const timeB = b.BookingTime || b.bookingTime || b.swapDate || b.CreatedAt || b.createdAt || '';
         
@@ -161,7 +268,8 @@ export default withStaffAuth(function StaffDashboard() {
         }
       });
       
-      setSwapTransactions(sortedSwaps);
+      setSwapTransactions(sortedSwaps); // For display
+      setSwapTransactionsForStatus(swapsForStatus || []); // For status check
     } catch (error: any) {
       console.error('[Dashboard] ❌ Failed to load swap transactions:', error);
       showToast({
@@ -376,11 +484,51 @@ export default withStaffAuth(function StaffDashboard() {
   // Calculate stats
   // Backend BookingStatus enum: pending, confirmed, cancelled, completed
   // Backend trả về status là PascalCase: Pending, Confirmed, Cancelled, Completed
-  // Staff chỉ xử lý completed bookings (đã có subscription và SwapTransaction)
-  const activeReservations = data.filter(d => {
-    const status = (d.status || '').toLowerCase();
-    return status === 'completed'; // Staff chỉ xử lý completed bookings
-  }).length;
+  // "Ready to Swap" = bookings có status = "completed" nhưng chưa swap xong (swap status != "completed")
+  const activeReservations = useMemo(() => {
+    // Chỉ tính khi swap transactions đã load xong (tránh hiển thị sai khi đang load)
+    // Nếu swapTransactionsForStatus đang empty và chưa load xong, return 0 để tránh flash
+    if (loadingSwaps && swapTransactionsForStatus.length === 0) {
+      return 0; // Đang load, chưa có data, không hiển thị
+    }
+    
+    // Tạo map bookingId -> swap status từ swapTransactionsForStatus (getAll - có BookingID)
+    const swapStatusMap = new Map<string, string>();
+    swapTransactionsForStatus.forEach((swap: any) => {
+      // getAll() trả về SwapTransactionDTOs có BookingID
+      const bookingId = swap.BookingID || swap.bookingID || swap.bookingId || swap.BookingId || (swap as any).booking_id || (swap as any).booking_ID;
+      const swapStatus = swap.SwapStatus || swap.swapStatus || swap.status || swap.Status || '';
+      if (bookingId && swapStatus) {
+        swapStatusMap.set(bookingId, swapStatus.toLowerCase());
+        console.log('[Dashboard] Mapped swap transaction:', { bookingId, swapStatus: swapStatus.toLowerCase() });
+      }
+    });
+    
+    console.log('[Dashboard] Swap status map:', Array.from(swapStatusMap.entries()));
+    console.log('[Dashboard] All bookings:', data.map(d => ({ id: d.id, status: d.status })));
+    
+    // Đếm bookings có status = "completed" nhưng chưa swap xong
+    const result = data.filter(d => {
+      const status = (d.status || '').toLowerCase();
+      if (status !== 'completed') return false;
+      
+      // Check swap status
+      const bookingId = d.id;
+      const swapStatus = swapStatusMap.get(bookingId);
+      const isNotSwapped = !swapStatus || swapStatus !== 'completed';
+      
+      if (!isNotSwapped) {
+        console.log('[Dashboard] Booking already swapped:', { bookingId, swapStatus });
+      }
+      
+      // Chưa swap xong = không có swap transaction hoặc swap status != "completed"
+      return isNotSwapped;
+    });
+    
+    console.log('[Dashboard] Ready to Swap count:', result.length, 'bookings:', result.map(r => r.id));
+    
+    return result.length;
+  }, [data, swapTransactionsForStatus, loadingSwaps]);
   
   // Use inventory data from useBatteries hook (same as Inventory page)
   // This ensures consistency between Dashboard and Inventory

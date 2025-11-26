@@ -39,9 +39,20 @@ export class BookingRepository implements IBookingRepository {
   }
 
   async getByCustomer(customerId: string): Promise<Booking[]> {
-    const response = await api.get(`${this.basePath}/customer/${customerId}`);
-    const data = response.data.data || response.data;
-    return Array.isArray(data) ? data : [];
+    try {
+      const response = await api.get(`${this.basePath}/customer/${customerId}`);
+      const data = response.data.data || response.data;
+      return Array.isArray(data) ? data : [];
+    } catch (error: any) {
+      // Handle 404 - customer has no bookings yet (this is normal)
+      if (error.response?.status === 404) {
+        console.log('[BookingRepository] No bookings found for customer:', customerId);
+        return [];
+      }
+      // Re-throw other errors
+      console.error('[BookingRepository] Error fetching customer bookings:', error);
+      throw error;
+    }
   }
 
   async getById(bookingId: string): Promise<Booking> {

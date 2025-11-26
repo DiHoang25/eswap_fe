@@ -2,11 +2,11 @@
 
 import { withStaffAuth } from '@/hoc/withAuth';
 import { Table } from '../components/Table';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBookings } from '@/presentation/hooks/useBookings';
 import { useToast } from '@/presentation/components/ui/Notification';
-import { Clock, RefreshCw, Filter, Calendar, User, Car, Battery, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Clock, RefreshCw, Filter, Calendar, User, Car, Battery, CheckCircle2, Loader2, X, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 function StatusBadge({ value }: { value: string }) {
@@ -43,13 +43,103 @@ function StatusBadge({ value }: { value: string }) {
   );
 }
 
+function SwapDetails({ swapTransaction }: { swapTransaction: any }) {
+  if (!swapTransaction) return null;
+
+  const swapTransactionId = swapTransaction.SwapTransactionID || swapTransaction.swapTransactionID || swapTransaction.transactionID || swapTransaction.TransactionID || '—';
+  const oldBatteryId = swapTransaction.OldBatteryID || swapTransaction.oldBatteryID || swapTransaction.oldBatteryId || '—';
+  const newBatteryId = swapTransaction.NewBatteryID || swapTransaction.newBatteryID || swapTransaction.newBatteryId || '—';
+  
+  // Cost: Check if value exists (including 0) - use null/undefined check instead of truthy
+  const costValue = swapTransaction.Cost ?? swapTransaction.cost ?? swapTransaction.amount ?? null;
+  const cost = costValue !== null && costValue !== undefined ? costValue : null;
+  
+  // SwapDate: SwapTransactionDTOs từ getAll() không có CreatedAt, cần lấy từ booking time hoặc booking data
+  // Thử nhiều nguồn để lấy ngày swap
+  const swapDate = swapTransaction.swapDate || 
+                   swapTransaction.createdAt || 
+                   swapTransaction.CreatedAt || 
+                   swapTransaction.UpdatedAt || 
+                   swapTransaction.updatedAt ||
+                   swapTransaction.BookingTime || // Có thể dùng booking time làm fallback
+                   swapTransaction.bookingTime ||
+                   null;
+  
+  const swapStatus = swapTransaction.SwapStatus || swapTransaction.swapStatus || swapTransaction.status || '—';
+
+  // Format swap date
+  let formattedSwapDate = '—';
+  if (swapDate) {
+    try {
+      const date = new Date(swapDate);
+      if (!isNaN(date.getTime())) {
+        formattedSwapDate = date.toLocaleString('vi-VN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+    } catch (e) {
+      console.warn('[Reservations] Failed to format swapDate:', swapDate);
+    }
+  }
+
+  // Format cost - Check if cost is not null/undefined (including 0)
+  const formattedCost = cost !== null && cost !== undefined 
+    ? new Intl.NumberFormat('vi-VN', {
+        style: 'currency',
+        currency: 'VND',
+      }).format(cost) 
+    : '—';
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-2">
+      <div className="flex items-center gap-2 mb-3">
+        <Info className="w-4 h-4 text-blue-600" />
+        <h4 className="text-sm font-semibold text-blue-900">Swap Information</h4>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div>
+          <span className="text-gray-600 font-medium">Swap Transaction ID:</span>
+          <span className="ml-2 text-gray-900">{swapTransactionId}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 font-medium">Swap Status:</span>
+          <span className="ml-2">
+            <StatusBadge value={swapStatus} />
+          </span>
+        </div>
+        <div>
+          <span className="text-gray-600 font-medium">Old Battery:</span>
+          <span className="ml-2 text-gray-900 font-mono">{oldBatteryId}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 font-medium">New Battery:</span>
+          <span className="ml-2 text-gray-900 font-mono">{newBatteryId}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 font-medium">Cost:</span>
+          <span className="ml-2 text-gray-900 font-semibold">{formattedCost}</span>
+        </div>
+        <div>
+          <span className="text-gray-600 font-medium">Swap Date:</span>
+          <span className="ml-2 text-gray-900">{formattedSwapDate}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default withStaffAuth(function ReservationsPage() {
   const router = useRouter();
   const [q, setQ] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all'); // completed, cancelled, all (pending hidden if not used)
+  const [filterStatus, setFilterStatus] = useState<string>('upcoming'); // upcoming, completed, cancelled, all
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10); // 10 items per page
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
   const { user, loading: authLoading } = useAuth();
 
@@ -105,6 +195,47 @@ export default withStaffAuth(function ReservationsPage() {
     (!authLoading && stationId) ? stationId : undefined
   );
 
+  // Fetch swap transactions to check which bookings have completed swaps
+  const [swapTransactions, setSwapTransactions] = useState<any[]>([]);
+  const [loadingSwaps, setLoadingSwaps] = useState(false);
+  
+  useEffect(() => {
+    const fetchSwapTransactions = async () => {
+      if (!stationId || authLoading) return;
+      
+      try {
+        setLoadingSwaps(true);
+        const { swapTransactionRepository } = await import('@/infrastructure/repositories/Hoang/SwapTransactionRepository');
+        const swaps = await swapTransactionRepository.getAll();
+        setSwapTransactions(swaps);
+        console.log('[Reservations] Loaded swap transactions:', swaps.length);
+      } catch (err) {
+        console.error('[Reservations] Failed to load swap transactions:', err);
+      } finally {
+        setLoadingSwaps(false);
+      }
+    };
+
+    fetchSwapTransactions();
+  }, [stationId, authLoading]);
+
+  // Refetch swap transactions when bookings refresh
+  useEffect(() => {
+    const fetchSwapTransactions = async () => {
+      if (!stationId) return;
+      
+      try {
+        const { swapTransactionRepository } = await import('@/infrastructure/repositories/Hoang/SwapTransactionRepository');
+        const swaps = await swapTransactionRepository.getAll();
+        setSwapTransactions(swaps);
+      } catch (err) {
+        console.error('[Reservations] Failed to refresh swap transactions:', err);
+      }
+    };
+
+    fetchSwapTransactions();
+  }, [bookings.length, stationId]);
+
   // Show error toast if any
   useEffect(() => {
     if (error) {
@@ -145,13 +276,61 @@ export default withStaffAuth(function ReservationsPage() {
   }, [router, showToast]);
 
   // Define columns with dynamic action buttons
-  const columns = useMemo(() => [
+  // Ở tab "Completed" (đã swap xong), không hiển thị cột status
+  const columns = useMemo(() => {
+    const baseColumns = [
+      { 
+        key: 'expand', 
+        header: '', 
+        render: (row: any) => {
+          if (!row.isSwapCompleted || !row.swapTransaction) return null;
+          const isExpanded = expandedRows.has(row.id);
+          return (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const newExpanded = new Set(expandedRows);
+                if (isExpanded) {
+                  newExpanded.delete(row.id);
+                } else {
+                  newExpanded.add(row.id);
+                }
+                setExpandedRows(newExpanded);
+              }}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              title="View swap information"
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-gray-600" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-600" />
+              )}
+            </button>
+          );
+        }
+      },
     { key: 'time', header: 'Time' },
     { key: 'driver', header: 'Customer' },
     { key: 'vehicle', header: 'License Plate' },
     { key: 'battery', header: 'Battery Type' },
-    { key: 'status', header: 'Status', render: (row: any) => <StatusBadge value={row.status} /> },
-    { 
+    ];
+
+    // Chỉ thêm cột status ở tab "Đang có booking tới" (upcoming)
+    if (filterStatus === 'upcoming') {
+      baseColumns.push({
+        key: 'status', 
+        header: 'Status', 
+        render: (row: any) => (
+          <div className="flex items-center gap-2">
+            <StatusBadge value={row.status} />
+          </div>
+        )
+      });
+    }
+
+    // Thêm cột actions
+    baseColumns.push({
       key: 'actions', 
       header: 'Actions', 
       render: (row: any) => {
@@ -159,8 +338,9 @@ export default withStaffAuth(function ReservationsPage() {
         // Note: "Confirmed" exists in enum but is never returned (immediately becomes "Completed")
         const statusLower = (row.status || '').toLowerCase();
         const isPending = statusLower === 'pending';
-        const isCompleted = statusLower === 'completed'; // Booking đã completed (có subscription) - SwapTransaction đã được tạo
+        const isCompleted = statusLower === 'completed'; // Booking đã completed (có subscription)
         const isCancelled = statusLower === 'cancelled';
+        const isSwapCompleted = row.isSwapCompleted === true; // Đã swap xong
 
         return (
           <div className="flex items-center gap-2">
@@ -171,9 +351,9 @@ export default withStaffAuth(function ReservationsPage() {
               </span>
             )}
 
-            {/* Completed: Booking đã completed (có subscription) - SwapTransaction đã được tạo tự động
-                → Hiển thị nút "Continue Swap" để staff complete swap transaction */}
-            {isCompleted && (
+            {/* Đang có booking tới: Booking đã completed (có subscription) nhưng chưa swap xong
+                → Hiển thị nút "Continue Swap" và "Cancel" */}
+            {isCompleted && !isSwapCompleted && (
               <>
                 <button
                   onClick={(e) => {
@@ -209,6 +389,13 @@ export default withStaffAuth(function ReservationsPage() {
               </>
             )}
 
+            {/* Swap completed: No actions, just show info */}
+            {isCompleted && isSwapCompleted && (
+              <span className="text-xs text-blue-600 font-medium">
+                ✓ Swap Completed
+              </span>
+            )}
+
             {/* Cancelled: Show cancelled text */}
             {isCancelled && (
               <span className="text-xs text-rose-600 font-medium">
@@ -218,15 +405,46 @@ export default withStaffAuth(function ReservationsPage() {
           </div>
         );
       }
-    },
-  ], [handleCancelBooking, handleCheckIn, showToast]);
+    });
+
+    return baseColumns;
+  }, [filterStatus, expandedRows, handleCancelBooking, handleCheckIn, showToast]);
 
   // Transform bookings to table data
+  // Note: Booking status = "completed" = booking đang chờ swap (chưa swap xong)
+  //       Swap status = "completed" = đã swap xong
   const data = useMemo(() => {
     console.log('[Reservations] Total bookings:', bookings.length);
     console.log('[Reservations] All bookings:', bookings);
+    console.log('[Reservations] Swap transactions:', swapTransactions.length);
     
-    const rows = bookings.map((b) => {
+    // Create a map of bookingId -> swap transaction (full object)
+    const swapMap = new Map<string, any>();
+    swapTransactions.forEach((swap: any) => {
+      const bookingId = swap.BookingID || swap.bookingID || swap.bookingId || swap.BookingId || (swap as any).booking_id || (swap as any).booking_ID;
+      if (bookingId) {
+        swapMap.set(bookingId, swap);
+      }
+    });
+    
+    // Create a map of bookingId -> swap transaction status for filtering
+    const swapStatusMap = new Map<string, string>();
+    swapTransactions.forEach((swap: any) => {
+      const bookingId = swap.BookingID || swap.bookingID || swap.bookingId || swap.BookingId || (swap as any).booking_id || (swap as any).booking_ID;
+      const swapStatus = swap.SwapStatus || swap.swapStatus || swap.status || swap.Status || '';
+      if (bookingId && swapStatus) {
+        swapStatusMap.set(bookingId, swapStatus.toLowerCase());
+      }
+    });
+    
+    // Transform all bookings - không filter ở đây, filter sẽ được thực hiện ở filtered useMemo
+    // Logic mới:
+    // - "upcoming": status = "completed" AND swap status != "completed" (chưa swap xong)
+    // - "completed": swap status = "completed" (đã swap xong)
+    // - "cancelled": status = "cancelled"
+    // - "all": tất cả
+    const rows = bookings
+      .map((b) => {
       // Log first booking to see structure
       if (bookings.indexOf(b) === 0) {
         console.log('[Reservations] Sample booking data:', b);
@@ -249,6 +467,27 @@ export default withStaffAuth(function ReservationsPage() {
       
       if (!bookingId) {
         console.error('[Reservations] No ID found for booking:', b);
+      }
+      
+      // Get swap transaction for this booking
+      const swapTransaction = swapMap.get(bookingId);
+      const swapStatus = swapStatusMap.get(bookingId);
+      // Chỉ coi là đã swap xong khi swapStatus thực sự là "completed"
+      const isSwapCompleted = swapStatus === 'completed';
+      
+      // Đảm bảo swapTransaction chỉ được gán khi thực sự đã swap xong
+      // Nếu chưa swap xong, không gán swapTransaction để tránh hiển thị nhầm
+      // Merge booking data vào swapTransaction để có thêm thông tin (BookingTime, CreatedAt)
+      let finalSwapTransaction = undefined;
+      if (isSwapCompleted && swapTransaction) {
+        finalSwapTransaction = {
+          ...swapTransaction,
+          // Thêm booking time và createdAt từ booking data
+          BookingTime: (b as any).BookingTime || (b as any).bookingTime || swapTransaction.BookingTime,
+          bookingTime: (b as any).BookingTime || (b as any).bookingTime || swapTransaction.bookingTime,
+          CreatedAt: (b as any).CreatedAt || (b as any).createdAt || swapTransaction.CreatedAt,
+          createdAt: (b as any).CreatedAt || (b as any).createdAt || swapTransaction.createdAt,
+        };
       }
       
       // Get booking time - Backend returns BookingTime (PascalCase, DateTime)
@@ -306,6 +545,8 @@ export default withStaffAuth(function ReservationsPage() {
         status,
         raw: b,
         sortDate: sortDate || new Date(0), // Use epoch if no date available (will sort last)
+        swapTransaction: finalSwapTransaction, // Chỉ include swap transaction khi đã swap xong
+        isSwapCompleted, // Flag to indicate if swap is completed
       };
     });
     
@@ -317,7 +558,7 @@ export default withStaffAuth(function ReservationsPage() {
     });
     
     return rows;
-  }, [bookings]);
+  }, [bookings, swapTransactions, filterStatus]);
 
   // Auto-refresh every 5 seconds to catch status changes
   useEffect(() => {
@@ -329,6 +570,34 @@ export default withStaffAuth(function ReservationsPage() {
     return () => clearInterval(interval);
   }, [autoRefresh, refetch]);
 
+  // Listen for bookings-refresh event (triggered after swap completion)
+  useEffect(() => {
+    const handleBookingsRefresh = async () => {
+      console.log('[Reservations] Received bookings-refresh event, refreshing...');
+      // Refresh both bookings and swap transactions
+      await refetch();
+      
+      // Also refresh swap transactions
+      if (stationId) {
+        try {
+          const { swapTransactionRepository } = await import('@/infrastructure/repositories/Hoang/SwapTransactionRepository');
+          const swaps = await swapTransactionRepository.getAll();
+          setSwapTransactions(swaps);
+          console.log('[Reservations] Refreshed swap transactions after swap completion:', swaps.length);
+        } catch (err) {
+          console.error('[Reservations] Failed to refresh swap transactions:', err);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bookings-refresh', handleBookingsRefresh);
+      return () => {
+        window.removeEventListener('bookings-refresh', handleBookingsRefresh);
+      };
+    }
+  }, [refetch, stationId]);
+
   // Reset to page 1 when filter or search changes
   useEffect(() => {
     setCurrentPage(1);
@@ -337,12 +606,20 @@ export default withStaffAuth(function ReservationsPage() {
   const filtered = useMemo(() => {
     let items = data;
     
-    // Filter by status tab - Backend returns: Pending, Cancelled, Completed
-    // Note: "Confirmed" exists in enum but is never returned to frontend
-    if (filterStatus === 'pending') {
-      items = items.filter(d => d.status.toLowerCase() === 'pending');
+    // Filter by status tab - Logic mới:
+    // - "upcoming": status = "completed" AND swap status != "completed" (đang có booking tới, chưa swap xong)
+    // - "completed": swap status = "completed" (đã swap xong)
+    // - "cancelled": status = "cancelled"
+    // - "all": tất cả
+    if (filterStatus === 'upcoming') {
+      // Đang có booking tới: status = "completed" nhưng chưa swap xong
+      items = items.filter(d => {
+        const statusLower = d.status.toLowerCase();
+        return statusLower === 'completed' && !d.isSwapCompleted;
+      });
     } else if (filterStatus === 'completed') {
-      items = items.filter(d => d.status.toLowerCase() === 'completed');
+      // Completed: đã swap xong (swap status = "completed")
+      items = items.filter(d => d.isSwapCompleted === true);
     } else if (filterStatus === 'cancelled') {
       items = items.filter(d => d.status.toLowerCase() === 'cancelled');
     }
@@ -361,10 +638,23 @@ export default withStaffAuth(function ReservationsPage() {
     return items;
   }, [q, data, filterStatus]);
 
-  // Count by status (case-insensitive) - Backend returns: Pending, Cancelled, Completed
-  // Note: "Pending" may not appear if users always have subscription before booking
-  const pendingCount = data.filter(d => d.status.toLowerCase() === 'pending').length;
-  const completedCount = data.filter(d => d.status.toLowerCase() === 'completed').length;
+  // Count by status - Logic mới:
+  // - "upcoming": status = "completed" nhưng chưa swap xong (đang có booking tới)
+  // - "completed": đã swap xong (swap status = "completed")
+  // - "cancelled": status = "cancelled"
+  const upcomingCount = useMemo(() => {
+    // Đang có booking tới: status = "completed" nhưng chưa swap xong
+    return data.filter(d => {
+      const statusLower = d.status.toLowerCase();
+      return statusLower === 'completed' && !d.isSwapCompleted;
+    }).length;
+  }, [data]);
+  
+  const completedSwapsCount = useMemo(() => {
+    // Đã swap xong: swap status = "completed"
+    return data.filter(d => d.isSwapCompleted === true).length;
+  }, [data]);
+  
   const cancelledCount = data.filter(d => d.status.toLowerCase() === 'cancelled').length;
 
   // Pagination logic
@@ -384,44 +674,50 @@ export default withStaffAuth(function ReservationsPage() {
   // Show loading if auth is still loading or no stationId yet
   const isInitializing = authLoading || !stationId;
 
+  // Debug log
+  console.log('[Reservations] Rendering with stats:', {
+    upcomingCount,
+    completedSwapsCount,
+    cancelledCount,
+    bookingsLength: bookings.length,
+    swapTransactionsLength: swapTransactions.length
+  });
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className={`grid grid-cols-1 ${pendingCount > 0 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
-        {/* Only show Pending card if there are pending bookings */}
-        {pendingCount > 0 && (
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-amber-700 font-medium mb-1">Pending</div>
-                <div className="text-3xl font-bold text-amber-900">{pendingCount}</div>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center text-white">
-                <Clock className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-        )}
-
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-emerald-700 font-medium mb-1">Completed</div>
-              <div className="text-3xl font-bold text-emerald-900">{completedCount}</div>
+            <div className="flex-1">
+              <div className="text-sm text-emerald-700 font-medium mb-1">Upcoming Bookings</div>
+              <div className="text-3xl font-bold text-emerald-900">{upcomingCount}</div>
             </div>
-            <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-white">
-              <Battery className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center text-white flex-shrink-0">
+              <Calendar className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="text-sm text-blue-700 font-medium mb-1">Completed Swaps</div>
+              <div className="text-3xl font-bold text-blue-900">{completedSwapsCount}</div>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white flex-shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
           </div>
         </div>
 
         <div className="bg-gradient-to-br from-rose-50 to-red-50 rounded-xl p-5 border border-rose-200">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <div className="text-sm text-rose-700 font-medium mb-1">Cancelled</div>
               <div className="text-3xl font-bold text-rose-900">{cancelledCount}</div>
             </div>
-            <div className="w-12 h-12 rounded-full bg-rose-500 flex items-center justify-center text-white">
+            <div className="w-12 h-12 rounded-full bg-rose-500 flex items-center justify-center text-white flex-shrink-0">
               <User className="w-6 h-6 line-through" />
             </div>
           </div>
@@ -432,24 +728,21 @@ export default withStaffAuth(function ReservationsPage() {
       <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Only show Pending filter if there are pending bookings */}
-            {pendingCount > 0 && (
               <button
-                onClick={() => setFilterStatus('pending')}
+              onClick={() => setFilterStatus('upcoming')}
                 className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                  filterStatus === 'pending'
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md'
+                filterStatus === 'upcoming'
+                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                Pending
+              Upcoming
               </button>
-            )}
             <button
               onClick={() => setFilterStatus('completed')}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                 filterStatus === 'completed'
-                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -469,7 +762,7 @@ export default withStaffAuth(function ReservationsPage() {
               onClick={() => setFilterStatus('all')}
               className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                 filterStatus === 'all'
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -526,7 +819,48 @@ export default withStaffAuth(function ReservationsPage() {
         </div>
       ) : (
         <>
-          <Table columns={columns} data={paginatedData} />
+          <div className="bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-600">
+                    {columns.map((c) => (
+                      <th
+                        key={c.key}
+                        className="px-5 py-3 border-b border-gray-200 sticky top-0 z-10 bg-white/95 backdrop-blur text-xs font-medium uppercase tracking-wide"
+                      >
+                        {c.header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedData.map((row) => {
+                    const isExpanded = expandedRows.has(row.id);
+                    const hasSwapDetails = row.isSwapCompleted && row.swapTransaction;
+                    return (
+                      <React.Fragment key={row.id}>
+                        <tr className="even:bg-gray-50/60 hover:bg-blue-50/60 transition-colors">
+                          {columns.map((c) => (
+                            <td key={c.key} className="px-5 py-3 border-b border-gray-100 text-gray-900">
+                              {c.render ? c.render(row) : String(row[c.key] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                        {hasSwapDetails && isExpanded && (
+                          <tr key={`${row.id}-details`}>
+                            <td colSpan={columns.length} className="px-5 py-3 border-b border-gray-100">
+                              <SwapDetails swapTransaction={row.swapTransaction} />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
           
           {/* Pagination Controls */}
           {totalPages > 1 && (

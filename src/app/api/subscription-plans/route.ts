@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const response = await fetch(apiEndpoint, {
       method: "GET",
       headers,
+      cache: "no-store", // Disable caching to always get fresh data
     });
 
     console.log('[subscription-plans] Response status:', response.status);

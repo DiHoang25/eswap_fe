@@ -8,6 +8,7 @@ import { UserRole } from "@/domain/entities/Auth";
 interface SetSessionParams {
   token: string;
   role: UserRole;
+  refreshToken?: string;
   maxAge?: number;
 }
 
@@ -17,31 +18,35 @@ class SessionCookieService {
    */
   async setSession(params: SetSessionParams): Promise<boolean> {
     try {
-      const response = await fetch("/api/auth/session", {
+      // Use the correct endpoint and format
+      const response = await fetch("/api/auth/set-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: params.token,
+          accessToken: params.token, // Map token to accessToken
+          refreshToken: params.refreshToken, // Optional refresh token
           role: params.role,
-          maxAge: params.maxAge || 60 * 60, // Default 1 hour
+          // Note: maxAge is not used by the endpoint, it uses fixed values
         }),
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        console.error("Failed to set session cookies:", error);
+        const errorText = await response.text();
+        const errorMessage = errorText || `HTTP ${response.status}`;
+        console.error("Failed to set session cookies:", errorMessage);
         return false;
       }
 
       const result = await response.json();
       if (!result.success) {
-        console.error("Session cookie API returned failure:", result);
+        console.error("Session cookie API returned failure:", result.message || result);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error("Setting server session failed:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Setting server session failed:", errorMessage);
       return false;
     }
   }

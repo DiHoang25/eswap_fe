@@ -78,7 +78,8 @@ export default withAdminAuth(function UserManagement() {
     if (!isCacheValid || users.length === 0) {
       dispatch(fetchAllUsers({ pageNumber: 1, pageSize: 100 }));
     }
-  }, [dispatch, lastFetched, users.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, lastFetched]); // Removed users.length to prevent infinite loop
 
   // Handle manual refresh
   const handleRefresh = useCallback(() => {

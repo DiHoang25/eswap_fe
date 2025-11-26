@@ -8,6 +8,7 @@ export interface Vehicle {
   color: string;
   batteryTypeID: string;
   batteryTypeModel: string | null;
+  batteryID?: string | null; // ID của pin hiện tại đang gắn trên xe (null nếu chưa có pin)
   userID: string;
   status: string;
   isAvailable: boolean;

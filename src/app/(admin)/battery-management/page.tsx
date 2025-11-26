@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { FaSearch, FaSyncAlt } from "react-icons/fa";
 import {
@@ -75,7 +77,8 @@ export default function BatteryManagement() {
         })
       ); // Fetch more items for client-side filtering
     }
-  }, [dispatch, lastFetched, batteries.length, page, typeFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, lastFetched, page, typeFilter]); // Removed batteries.length to prevent infinite loop
 
   // Handle manual refresh
   const handleRefresh = useCallback(() => {
@@ -110,8 +113,8 @@ export default function BatteryManagement() {
     return batteries.filter((battery) => {
       // Search by battery ID
       const matchesSearch = battery.batteryID
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ?? false;
 
       // Filter by status
       let matchesStatusFilter = true;
@@ -120,7 +123,7 @@ export default function BatteryManagement() {
       } else if (statusFilter === "faulty") {
         matchesStatusFilter = battery.status === "faulty";
       } else if (statusFilter === "null") {
-        matchesStatusFilter = battery.status === null;
+        matchesStatusFilter = battery.status === null || battery.status === undefined;
       }
 
       // Filter by type (based on batteryID prefix)
@@ -165,15 +168,15 @@ export default function BatteryManagement() {
   }, [page, filteredBatteries, rowsPerPage]);
 
   // Get status color
-  const getStatusColor = (status: string | null) => {
+  const getStatusColor = (status: string | null | undefined) => {
     if (status === "available") return "success";
     if (status === "faulty") return "danger";
     return "default";
   };
 
   // Get status label
-  const getStatusLabel = (status: string | null) => {
-    if (status === null) return "Unassigned";
+  const getStatusLabel = (status: string | null | undefined) => {
+    if (!status || status === null) return "Unassigned";
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -439,4 +442,4 @@ export default function BatteryManagement() {
       </div>
     </div>
   );
-});
+}
